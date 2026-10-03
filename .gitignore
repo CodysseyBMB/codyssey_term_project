@@ -1,0 +1,17 @@
+.DS_Store
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+data/
+logs/
+backups/
+*.db
+*.sqlite
+*.sqlite3
+docs/skelton_plan.md
+docs/authentication.md

@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>AI Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}">
+  </head>
+  <body>
+    <main class="container">
+      <section class="status-card">
+        <p class="eyebrow">FastAPI skeleton</p>
+        <h1>AI Chatbot 프로젝트</h1>
+        <p>스켈레톤이 정상적으로 실행 중입니다.</p>
+        <p>환경: {{ app_env }} · <a href="/health">health 확인</a></p>
+      </section>
+    </main>
+  </body>
+</html>
