@@ -22,7 +22,7 @@
 | ------ | ---------------------------------- | ------------------------------------------------- |
 | 백엔드    | Python + FastAPI                   | 과제 필수, 타입 기반 검증과 API 문서 지원                        |
 | UI     | Jinja2 + HTML/CSS + 소량의 JavaScript | 단일 저장소에서 인증과 화면을 단순하게 구현 가능                       |
-| DB     | PostgreSQL / Supabase                 | 모든 환경의 DB 동작을 통일하고 운영 데이터는 Supabase에 영속 저장한다.          |
+| DB     | PostgreSQL / Render PostgreSQL        | 모든 환경의 DB 동작을 통일하고 운영 데이터는 Render PostgreSQL에 저장한다.     |
 | 스키마 변경 | Alembic                            | SQLAlchemy 모델과 스키마 변경 이력을 표준 도구로 관리                 |
 | 인증     | 서명된 쿠키 세션 + 비밀번호 해시                | Jinja2 기반 단일 웹 앱에 단순하며 별도 세션 저장소가 필요 없음           |
 | AI 연동  | 공급자 SDK 또는 `httpx`를 감싼 어댑터         | API 키를 서버에만 두고 테스트 시 가짜 구현으로 교체 가능                |
@@ -90,8 +90,8 @@ alembic.ini
 .github/
 └── workflows/
     └── pr-check.yml
-compose.yaml                 # 로컬 PostgreSQL과 테스트 DB
-render.yaml                  # Render 무료 웹 서비스와 자동 배포 설정
+Dockerfile                   # FastAPI Web 이미지
+compose.yaml                 # 로컬 FastAPI Web과 PostgreSQL
 tests/
 .env.example
 .gitignore
@@ -235,7 +235,7 @@ alembic.ini
 alembic revision --autogenerate -m "add request id to chats"
 ```
 
-자동 생성 결과는 그대로 병합하지 않고 `upgrade()`와 `downgrade()`가 의도한 스키마 변경만 포함하는지 리뷰한다. 타입, 인덱스와 제약 조건은 PostgreSQL을 기준으로 작성하고 로컬 PostgreSQL과 Supabase 양쪽에서 검증한다.
+자동 생성 결과는 그대로 병합하지 않고 `upgrade()`와 `downgrade()`가 의도한 스키마 변경만 포함하는지 리뷰한다. 타입, 인덱스와 제약 조건은 PostgreSQL을 기준으로 작성하고 로컬 PostgreSQL과 Render PostgreSQL 양쪽에서 검증한다.
 
 ```bash
 alembic upgrade head
@@ -293,7 +293,7 @@ DB 저장 정책은 팀이 명확히 합의해야 한다. 기본안은 **AI 호�
 - 같은 PostgreSQL DB에 `alembic upgrade head`를 다시 실행해도 변경 없이 성공하는지 확인
 - `alembic current`와 `alembic heads`가 동일한 revision을 가리키는지 확인
 - 지원하는 downgrade 범위에서 `downgrade` 후 `upgrade head`가 다시 성공하는지 확인
-- PostgreSQL 드라이버가 설치된 상태에서 Supabase 형식의 `DATABASE_URL`을 파싱할 수 있는지 확인
+- PostgreSQL 드라이버가 설치된 상태에서 Render Internal Database URL을 파싱할 수 있는지 확인
 - Render 시작 명령이 `$PORT`에 바인딩하고 migration 실패 시 Uvicorn을 실행하지 않는지 확인
 
 
@@ -316,7 +316,7 @@ pytest가 마이그레이션된 DB로 FastAPI 시작
 모두 성공해야 병합 가능
 ```
 
-PR 워크플로에는 Supabase 연결 문자열과 운영 비밀값을 전달하지 않는다. 워크플로가 일회성 PostgreSQL service container를 만들고 `alembic upgrade head`를 실행한 뒤 테스트 fixture와 애플리케이션 팩토리가 같은 테스트 DB를 사용하게 한다. 리뷰 중인 코드가 운영 DB를 변경하거나 배포되지 않도록 PR 단계는 마이그레이션 **검증만** 담당한다.
+PR 워크플로에는 Render 운영 DB 연결 문자열과 운영 비밀값을 전달하지 않는다. 워크플로가 일회성 PostgreSQL service container를 만들고 `alembic upgrade head`를 실행한 뒤 테스트 fixture와 애플리케이션 팩토리가 같은 테스트 DB를 사용하게 한다. 리뷰 중인 코드가 운영 DB를 변경하거나 배포되지 않도록 PR 단계는 마이그레이션 **검증만** 담당한다.
 
 ```python
 def test_app_starts_with_migrated_database(migrated_database_url):
@@ -344,7 +344,7 @@ jobs:
       - run: pytest
 ```
 
-브랜치 보호 규칙에서 `pr-check`를 필수 상태 검사로 지정해 성공한 PR만 병합한다. CI는 “PostgreSQL service 준비 → `alembic upgrade head` → 테스트” 순서를 검증하며 운영 Supabase에는 연결하지 않는다.
+브랜치 보호 규칙에서 `pr-check`를 필수 상태 검사로 지정해 성공한 PR만 병합한다. CI는 “PostgreSQL service 준비 → `alembic upgrade head` → 테스트” 순서를 검증하며 운영 Render PostgreSQL에는 연결하지 않는다.
 
 수동 인수 테스트:
 
@@ -359,27 +359,27 @@ jobs:
 
 ### S11. 배포, 문서, 평가용 패키지
 
-배포 대상은 **Render Free Web Service**, 운영 DB는 **Supabase Free PostgreSQL**로 확정한다. Render를 GitHub 저장소의 `main` 브랜치와 연결해 병합된 커밋만 자동 배포한다. 로컬은 Docker Compose PostgreSQL, PR CI는 PostgreSQL service container를 사용하며 Render의 로컬 파일시스템은 영속 저장소로 사용하지 않는다.
+배포 대상은 **Render Free Web Service**, 운영 DB는 **Render Free PostgreSQL**로 확정한다. Render를 GitHub 저장소의 `main` 브랜치와 연결해 병합된 커밋만 자동 배포한다. 로컬은 Docker Compose로 FastAPI Web과 PostgreSQL을 함께 실행하고, PR CI는 PostgreSQL service container를 사용한다. Render의 로컬 파일시스템은 영속 저장소로 사용하지 않는다.
 
 현재 단계에서 애플리케이션과 문서는 다음 배포 경계를 지킨다.
 
-- `render.yaml`에는 Python runtime, 무료 plan, `main` 자동 배포, `/health` health check를 선언한다.
+- Render Dashboard에서 Python runtime, 무료 plan, `main` 자동 배포와 `/health` health check를 설정한다.
 - build command는 `pip install -r requirements.txt`로 고정한다.
 - 무료 plan에는 pre-deploy command가 없으므로 start command는 `alembic upgrade head && uvicorn app.main:create_app --factory --host 0.0.0.0 --port $PORT`로 고정한다.
 - migration이 실패하면 Uvicorn을 실행하지 않아 새 deploy를 실패 처리한다.
 - 운영 `DATABASE_URL`, `SESSION_SECRET`, `AI_API_KEY`는 Render Secret Environment Variables로만 저장한다.
-- Supabase 연결은 pooler가 제공하는 PostgreSQL URL과 TLS를 사용하고 실제 연결 문자열은 저장소나 GitHub Actions에 넣지 않는다.
+- Web Service와 PostgreSQL을 같은 리전에 두고 Render Internal Database URL을 사용한다. 실제 연결 문자열은 저장소나 GitHub Actions에 넣지 않는다.
 - Render 로컬 파일에 사용자 데이터·백업을 저장하지 않는다.
 - Render가 제공하는 HTTPS `onrender.com` URL을 사용하며 별도 Nginx, systemd, SSH 서버와 GitHub Actions CD workflow는 두지 않는다.
 
 무료 plan 제약은 문서와 시연 절차에 명시한다.
 
 - Render는 일정 시간 요청이 없으면 sleep하고 첫 요청에서 cold start가 발생할 수 있으므로 발표 전에 URL을 한 번 호출한다.
-- Supabase 무료 프로젝트는 장기간 비활성 상태에서 pause될 수 있으므로 평가 전 대시보드에서 상태와 DB 연결을 확인한다.
+- Render 무료 PostgreSQL은 생성 후 30일에 만료되므로 제출·발표 전에 만료일과 DB 연결을 확인한다.
 - 무료 plan 한도 또는 정책 변경에 대비해 평가 직전 `/health`, 회원가입, 질문, 기록 조회를 전체 리허설한다.
-- Render/Supabase 장애 시 자동 우회 배포는 만들지 않고 서비스 대시보드 상태와 로그를 확인한다.
+- Render 장애 시 자동 우회 배포는 만들지 않고 서비스 대시보드 상태와 로그를 확인한다.
 
-무료 plan의 최신 제한은 [Render Free 문서](https://render.com/docs/free)와 [Supabase Free project pause 문서](https://supabase.com/docs/guides/platform/free-project-pausing)를 기준으로 배포 직전에 다시 확인한다.
+무료 plan의 최신 제한은 [Render Free 문서](https://render.com/docs/free)를 기준으로 배포 직전에 다시 확인한다.
 
 평가자가 DB를 확인할 수 있도록 다음 방법을 준비한다.
 
@@ -398,7 +398,7 @@ README에 반드시 포함할 내용:
 - DB 로그 확인 화면/API 사용법
 - 브랜치 전략과 PR 규칙
 - 팀 역할과 개인별 실제 작업 요약
-- 배포가 완료된 뒤 Render URL, Supabase 연결 방식과 cold start 대응 절차
+- 배포가 완료된 뒤 Render URL, Internal Database URL 연결 방식과 cold start 대응 절차
 - Alembic revision 생성·리뷰·upgrade·downgrade 규칙
 
 배포 전에는 Git 전체 이력에서도 비밀값 노출 여부를 확인한다. 한 번 커밋된 키는 파일에서 지우는 것만으로 부족하므로 즉시 폐기·재발급하고 이력 정리 여부를 판단해야 한다.
@@ -526,7 +526,7 @@ docs/*     문서 변경 브랜치
 - 내 대화 기록 화면/API와 확인용 SQL
 - 권한 격리 및 장애 테스트
 - README, API 명세, ERD, 역할/작업 요약
-- Supabase PostgreSQL 연결과 운영 migration 검증
+- Render PostgreSQL 연결과 운영 migration 검증
 - Render GitHub 연동·자동 배포와 외부 접속 확인
 
 종료 조건: 필수 인수 테스트와 평가 체크리스트가 모두 통과한다.
@@ -546,7 +546,7 @@ docs/*     문서 변경 브랜치
 
 | 확장               | 도입 조건                                         | 추가 구현                                  | 주의점                            |
 | ---------------- | --------------------------------------------- | -------------------------------------- | ------------------------------ |
-| 운영 DB 유료 전환     | 무료 Supabase의 용량·일시정지 제한이 문제가 될 때                | 유료 plan, 백업·복구 정책                     | 과제 범위에서는 무료 plan 유지              |
+| 운영 DB 유료 전환     | 무료 Render PostgreSQL의 30일 만료가 문제가 될 때                | 유료 plan, 백업·복구 정책                     | 과제 일정이 30일 이내면 무료 plan 유지       |
 | React/Vue 프론트 분리 | 팀원이 SPA 경험이 있고 UI 상호작용이 핵심                    | CORS, 별도 빌드/배포, API 인증 설계              | 과제 핵심보다 통합 비용이 커질 수 있음         |
 | HTMX             | Jinja2를 유지하며 부분 갱신을 간결하게 만들고 싶을 때             | HTML fragment 응답                       | 팀 전체가 패턴을 익혀야 함                |
 | 응답 스트리밍(SSE)     | 긴 AI 응답의 체감 대기 시간을 개선할 때                      | 스트림 API, 중단/실패 UI, 저장 시점 정의            | 테스트와 오류 처리가 복잡해짐               |
@@ -585,11 +585,11 @@ docs/*     문서 변경 브랜치
 | 위험              | 조기 신호                     | 대응                                          |
 | --------------- | ------------------------- | ------------------------------------------- |
 | API 키 노출        | 키를 코드/PR에 붙여 넣음           | `.env.example`, secret scan, 노출 키 즉시 폐기·재발급 |
-| 운영 DB migration 오류 | 잘못된 Alembic revision이 Supabase에 적용됨 | additive migration 우선, revision 리뷰, PR 임시 DB 검증       |
+| 운영 DB migration 오류 | 잘못된 Alembic revision이 Render DB에 적용됨 | additive migration 우선, revision 리뷰, PR 임시 DB 검증       |
 | PR이 운영 DB를 변경   | PR 워크플로에 운영 연결 문자열이 포함됨    | CI PostgreSQL service만 사용하고 운영 secrets를 전달하지 않음 |
 | Alembic head 충돌   | 두 PR이 서로 다른 head revision을 생성 | PR 병합 전 최신 `main` 기준으로 revision을 재생성하거나 merge revision 추가 |
 | Render cold start | 첫 접속이 오래 걸리거나 health check가 지연됨 | 평가 전 사전 호출, 로딩 안내, 배포 URL 리허설                  |
-| Supabase pause   | 장기 비활성 후 DB 연결 실패             | 평가 전 프로젝트 상태 확인과 resume, 연결 재검증               |
+| Render DB 만료   | 생성 30일 후 DB 접근 불가               | 제출·발표 전 만료일 확인, 필요 데이터 사전 백업                  |
 | 무료 한도 초과        | 배포·대역폭·DB 용량 제한 경고            | 대시보드 사용량 확인, 불필요한 배포와 대용량 로그 억제             |
 | 비밀값 커밋          | 설정 파일에 실제 운영 값 포함            | Render secret 환경 변수, 예시값만 커밋, secret scan           |
 | 외부 AI API 실패    | 로컬에서는 되지만 Render에서 호출 실패   | Render 환경 변수와 공급자 설정 확인 후 배포 환경에서 실제 호출 테스트 |
@@ -627,14 +627,14 @@ docs/*     문서 변경 브랜치
 - [ ] 비밀번호는 해시로 저장되고 비밀값/대화 원문은 로그에 남지 않는다.
 - [ ] 외부 네트워크에서 배포 URL에 접속할 수 있다.
 - [ ] Render HTTPS URL과 `/health`가 평가 기간 동안 정상 동작한다.
-- [ ] 운영 데이터가 Supabase PostgreSQL에 저장되고 재배포 후에도 유지된다.
+- [ ] 운영 데이터가 Render PostgreSQL에 저장되고 Web 재배포 후에도 유지된다.
 - [ ] 배포 환경에서 선택한 AI API를 실제로 호출할 수 있다.
 - [ ] PR에서 격리된 PostgreSQL에 `alembic upgrade head`를 적용한 뒤 테스트가 자동 실행된다.
 - [ ] Render 시작 단계에서 `alembic upgrade head`가 성공한 뒤 앱이 실행된다.
 - [ ] migration 실패 시 새 deploy가 실패하고 원인을 Render 로그에서 확인할 수 있다.
-- [ ] `render.yaml`의 build/start/health check 설정이 실제 서비스 설정과 일치한다.
-- [ ] 운영 비밀값과 Supabase 연결 문자열이 코드와 Git 이력에 없다.
-- [ ] cold start와 Supabase pause 상황을 평가 전에 점검했다.
+- [ ] Render Dashboard의 build/start/health check 설정이 README와 일치한다.
+- [ ] 운영 비밀값과 Render DB 연결 문자열이 코드와 Git 이력에 없다.
+- [ ] cold start와 Render DB 만료일을 평가 전에 점검했다.
 - [ ] 평가자가 API 또는 화면으로 DB 로그를 확인할 수 있다.
 
 
@@ -654,9 +654,9 @@ docs/*     문서 변경 브랜치
 - 서비스의 구체적 타겟 사용자와 챗봇 주제
 - AI 공급자와 모델, 호출 비용 한도
 - 사용자 식별자(이메일 또는 사용자명)와 세션 쿠키 만료 시간
-- Render/Supabase 계정 소유자와 팀원 접근 권한
+- Render 계정 소유자와 팀원 접근 권한
 - Render 서비스 이름, 리전과 GitHub `main` 자동 배포 설정
-- Supabase 프로젝트와 운영 `DATABASE_URL` 관리 담당자
+- Render PostgreSQL과 운영 `DATABASE_URL` 관리 담당자
 - 최근 문맥 N 값과 대화방 기능 포함 여부
 - 배포 담당, 백업 담당, 리뷰어 순번, 정기 통합 시간
 - P1 확장 기능 최대 1~2개와 포기 기준

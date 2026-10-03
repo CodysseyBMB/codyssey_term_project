@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     )
 
     app_env: str = "development"
-    database_url: str = "sqlite:///./data/chatbot.db"
+    database_url: str = "postgresql://chatbot:chatbot@postgres:5432/chatbot"
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+import os
 from pathlib import Path
 
 import pytest
@@ -21,9 +22,9 @@ def make_alembic_config(database_url: str) -> Config:
     return config
 
 
-@pytest.fixture
-def database_url(tmp_path: Path) -> str:
-    return f"sqlite:///{tmp_path / 'test.db'}"
+@pytest.fixture(scope="session")
+def database_url() -> str:
+    return os.environ["DATABASE_URL"]
 
 
 @pytest.fixture
