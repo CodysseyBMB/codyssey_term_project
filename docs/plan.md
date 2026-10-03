@@ -6,14 +6,14 @@
 
 ## 1. 과제 해석과 기술 선택 원칙
 
-과제에서 **Python과 FastAPI는 필수**이다. SQLite는 권장 기술이며 다른 DB를 사용할 수 있지만, 평가자가 저장된 대화 로그를 확인할 수 있어야 한다. Jinja2는 명시적 필수 기술은 아니지만, FastAPI의 서버 렌더링 UI를 가장 적은 복잡도로 구현할 수 있어 기본안으로 채택한다.
+과제에서 **Python과 FastAPI는 필수**이다. DB 기술은 평가자가 저장된 대화 로그를 확인할 수 있으면 되므로 PostgreSQL로 통일한다. Jinja2는 명시적 필수 기술은 아니지만, FastAPI의 서버 렌더링 UI를 가장 적은 복잡도로 구현할 수 있어 기본안으로 채택한다.
 
 이 프로젝트의 우선순위는 다음과 같다.
 
 1. 회원가입/로그인 후 질문하고 AI 답변을 받는 핵심 흐름을 완성한다.
 2. 대화 문맥, DB 저장, 로그 조회, 예외 처리 등 평가 필수 조건을 검증 가능하게 만든다.
 3. 외부에서 접속 가능한 환경에 배포하고 문서와 Git 이력을 갖춘다.
-4. 위 항목이 안정화된 뒤에만 프론트엔드 분리, PostgreSQL, 스트리밍 등의 확장을 검토한다.
+4. 위 항목이 안정화된 뒤에만 프론트엔드 분리, 스트리밍 등의 확장을 검토한다.
 
 ### 권장 기본 스택
 
@@ -22,14 +22,14 @@
 | ------ | ---------------------------------- | ------------------------------------------------- |
 | 백엔드    | Python + FastAPI                   | 과제 필수, 타입 기반 검증과 API 문서 지원                        |
 | UI     | Jinja2 + HTML/CSS + 소량의 JavaScript | 단일 저장소에서 인증과 화면을 단순하게 구현 가능                       |
-| DB     | SQLite + SQLAlchemy 2.x            | 로컬 개발과 평가용 데이터 확인이 쉬우며 향후 DB 교체 가능                |
+| DB     | PostgreSQL / Supabase                 | 모든 환경의 DB 동작을 통일하고 운영 데이터는 Supabase에 영속 저장한다.          |
 | 스키마 변경 | Alembic                            | SQLAlchemy 모델과 스키마 변경 이력을 표준 도구로 관리                 |
 | 인증     | 서명된 쿠키 세션 + 비밀번호 해시                | Jinja2 기반 단일 웹 앱에 단순하며 별도 세션 저장소가 필요 없음           |
 | AI 연동  | 공급자 SDK 또는 `httpx`를 감싼 어댑터         | API 키를 서버에만 두고 테스트 시 가짜 구현으로 교체 가능                |
 | 테스트    | pytest + FastAPI TestClient/httpx  | 인증, API, DB, 장애 시나리오 자동 검증                        |
 | CI     | GitHub Actions                     | PR마다 마이그레이션과 테스트를 자동 검증                           |
 | 설정     | `.env` + 설정 클래스                    | 키를 코드와 Git에서 분리하고 필수 설정 누락을 조기 발견                 |
-| 배포     | AWS EC2                            | 서버 구성을 직접 제어하며 배포 절차는 별도 단계에서 확정              |
+| 배포     | Render Free Web Service            | GitHub 연동, 자동 배포와 HTTPS URL을 별도 서버 운영 없이 제공한다.       |
 
 
 
@@ -60,7 +60,7 @@
 
 ## 3. 목표 아키텍처
 
-라우터가 AI SDK나 SQL을 직접 다루지 않게 한다. `ChatService`가 “요청 수신 → 문맥 조회 → AI 호출 → 응답 저장 → 결과 반환”을 조정하고, 외부 AI 호출과 DB 접근은 각각 어댑터와 저장소로 분리한다. 이 구조면 AI 공급자나 SQLite를 바꾸더라도 화면과 핵심 비즈니스 흐름의 변경을 줄일 수 있다.
+라우터가 AI SDK나 SQL을 직접 다루지 않게 한다. `ChatService`가 “요청 수신 → 문맥 조회 → AI 호출 → 응답 저장 → 결과 반환”을 조정하고, 외부 AI 호출과 DB 접근은 각각 어댑터와 저장소로 분리한다. 로컬·CI·운영 모두 PostgreSQL을 사용하고 SQLAlchemy와 Alembic으로 같은 스키마를 관리한다.
 
 ### 제안 디렉터리 구조
 
@@ -87,16 +87,11 @@ alembic/
 ├── env.py                   # SQLAlchemy metadata와 DATABASE_URL 연결
 └── versions/                # Alembic revision 파일
 alembic.ini
-scripts/
-└── ec2/
-    ├── setup.sh             # 패키지·사용자·systemd·Nginx 준비
-    ├── deploy.sh            # 백업·Alembic·서비스 재시작·health 확인
-    └── templates/
-        ├── chatbot.service
-        └── chatbot.nginx.conf
 .github/
 └── workflows/
     └── pr-check.yml
+compose.yaml                 # 로컬 PostgreSQL과 테스트 DB
+render.yaml                  # Render 무료 웹 서비스와 자동 배포 설정
 tests/
 .env.example
 .gitignore
@@ -240,7 +235,7 @@ alembic.ini
 alembic revision --autogenerate -m "add request id to chats"
 ```
 
-자동 생성 결과는 그대로 병합하지 않고 `upgrade()`와 `downgrade()`가 의도한 스키마 변경만 포함하는지 리뷰한다. 특히 SQLite의 제약 조건이나 컬럼 변경은 필요하면 Alembic batch mode를 사용한다.
+자동 생성 결과는 그대로 병합하지 않고 `upgrade()`와 `downgrade()`가 의도한 스키마 변경만 포함하는지 리뷰한다. 타입, 인덱스와 제약 조건은 PostgreSQL을 기준으로 작성하고 로컬 PostgreSQL과 Supabase 양쪽에서 검증한다.
 
 ```bash
 alembic upgrade head
@@ -248,7 +243,7 @@ alembic downgrade -1
 alembic current
 ```
 
-한 번 공유되거나 운영 DB에 적용된 revision 파일은 수정하지 않는다. 스키마를 다시 바꾸려면 새 revision을 추가한다. FastAPI lifespan에서는 마이그레이션을 자동 실행하지 않으며, 로컬·CI·향후 EC2 배포 절차에서 `alembic upgrade head`를 명시적으로 실행한다. 운영 SQLite에 적용할 때는 먼저 DB 파일을 백업하고, 성공한 뒤 애플리케이션 서비스를 재시작한다.
+한 번 공유되거나 운영 DB에 적용된 revision 파일은 수정하지 않는다. 스키마를 다시 바꾸려면 새 revision을 추가한다. 로컬·CI에서는 `alembic upgrade head`를 명시적으로 실행한다. Render 무료 플랜은 별도 pre-deploy command를 제공하지 않으므로 시작 명령에서 마이그레이션이 성공한 경우에만 Uvicorn을 실행한다. 운영 migration은 이전 애플리케이션 버전과 호환되도록 additive change를 우선한다.
 
 
 
@@ -294,25 +289,25 @@ DB 저장 정책은 팀이 명확히 합의해야 한다. 기본안은 **AI 호�
 - 최근 N개 대화가 시간순으로 문맥에 포함되는지 확인
 - AI 타임아웃 및 공급자 오류가 약속된 상태 코드/오류 코드로 변환되는지 확인
 - DB 저장 실패가 처리되고 실패 로그가 남는지 확인
-- 빈 SQLite에 `alembic upgrade head`를 실행하면 최신 스키마가 생성되는지 확인
-- 같은 SQLite에 `alembic upgrade head`를 다시 실행해도 변경 없이 성공하는지 확인
+- 빈 PostgreSQL 테스트 DB에 `alembic upgrade head`를 실행하면 최신 스키마가 생성되는지 확인
+- 같은 PostgreSQL DB에 `alembic upgrade head`를 다시 실행해도 변경 없이 성공하는지 확인
 - `alembic current`와 `alembic heads`가 동일한 revision을 가리키는지 확인
 - 지원하는 downgrade 범위에서 `downgrade` 후 `upgrade head`가 다시 성공하는지 확인
-- `scripts/ec2/*.sh`가 `bash -n`과 ShellCheck를 통과하는지 확인
-- systemd·Nginx 템플릿이 샘플 환경 값으로 렌더링되고 문법 검증 가능한지 확인
+- PostgreSQL 드라이버가 설치된 상태에서 Supabase 형식의 `DATABASE_URL`을 파싱할 수 있는지 확인
+- Render 시작 명령이 `$PORT`에 바인딩하고 migration 실패 시 Uvicorn을 실행하지 않는지 확인
 
 
 
 #### PR 자동 검증
 
-PR이 생성되거나 새 커밋이 올라오면 GitHub Actions가 운영 DB가 아닌 임시 SQLite를 대상으로 다음 작업을 실행한다.
+PR이 생성되거나 새 커밋이 올라오면 GitHub Actions가 운영 DB가 아닌 PostgreSQL service container를 대상으로 다음 작업을 실행한다.
 
 ```text
 PR 생성 또는 갱신
        ↓
 의존성 설치
        ↓
-임시 SQLite에 alembic upgrade head 실행
+격리된 PostgreSQL에 alembic upgrade head 실행
        ↓
 pytest가 마이그레이션된 DB로 FastAPI 시작
        ↓
@@ -321,7 +316,7 @@ pytest가 마이그레이션된 DB로 FastAPI 시작
 모두 성공해야 병합 가능
 ```
 
-PR 워크플로에는 AWS 자격 증명과 운영 `.env`를 전달하지 않는다. 워크플로가 임시 SQLite 경로를 설정하고 `alembic upgrade head`를 실행한 뒤 테스트 fixture와 애플리케이션 팩토리가 같은 DB를 사용하게 한다. 리뷰 중인 코드가 운영 DB를 변경하거나 배포되지 않도록 PR 단계는 마이그레이션 **검증만** 담당한다.
+PR 워크플로에는 Supabase 연결 문자열과 운영 비밀값을 전달하지 않는다. 워크플로가 일회성 PostgreSQL service container를 만들고 `alembic upgrade head`를 실행한 뒤 테스트 fixture와 애플리케이션 팩토리가 같은 테스트 DB를 사용하게 한다. 리뷰 중인 코드가 운영 DB를 변경하거나 배포되지 않도록 PR 단계는 마이그레이션 **검증만** 담당한다.
 
 ```python
 def test_app_starts_with_migrated_database(migrated_database_url):
@@ -346,11 +341,10 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt
       - run: alembic upgrade head
-      - run: shellcheck scripts/ec2/*.sh
       - run: pytest
 ```
 
-브랜치 보호 규칙에서 `pr-check`를 필수 상태 검사로 지정해 성공한 PR만 병합한다. CI는 “임시 DB 생성 → `alembic upgrade head` → 테스트” 순서를 검증하며, 애플리케이션 시작과 스키마 변경을 분리한다.
+브랜치 보호 규칙에서 `pr-check`를 필수 상태 검사로 지정해 성공한 PR만 병합한다. CI는 “PostgreSQL service 준비 → `alembic upgrade head` → 테스트” 순서를 검증하며 운영 Supabase에는 연결하지 않는다.
 
 수동 인수 테스트:
 
@@ -365,51 +359,27 @@ jobs:
 
 ### S11. 배포, 문서, 평가용 패키지
 
-배포 대상은 **AWS EC2**로 확정한다. EC2 인스턴스 내부의 반복 가능한 설정과 배포 절차는 `scripts/ec2/`의 Bash 스크립트로 관리한다. 보안 그룹, IAM, 인스턴스 생성 같은 AWS 계정 자원은 후속 Terraform 또는 CloudFormation 범위로 분리한다.
+배포 대상은 **Render Free Web Service**, 운영 DB는 **Supabase Free PostgreSQL**로 확정한다. Render를 GitHub 저장소의 `main` 브랜치와 연결해 병합된 커밋만 자동 배포한다. 로컬은 Docker Compose PostgreSQL, PR CI는 PostgreSQL service container를 사용하며 Render의 로컬 파일시스템은 영속 저장소로 사용하지 않는다.
 
 현재 단계에서 애플리케이션과 문서는 다음 배포 경계를 지킨다.
 
-- 애플리케이션 시작과 DB 마이그레이션을 분리한다.
-- FastAPI lifespan에서 Alembic을 자동 실행하지 않는다.
-- 배포 절차는 의존성 설치 → DB 백업 → `alembic upgrade head` → 애플리케이션 재시작 → `/health` 확인 순서를 따른다.
-- 마이그레이션에 실패하면 새 애플리케이션 프로세스를 시작하지 않고 기존 버전을 유지한다.
-- SQLite 파일, 운영 `.env`, 로그와 백업은 Git 저장소 밖의 영속 경로에 둔다.
-- 운영 자격 증명과 AI API 키를 GitHub Actions의 PR 검증 작업에 전달하지 않는다.
+- `render.yaml`에는 Python runtime, 무료 plan, `main` 자동 배포, `/health` health check를 선언한다.
+- build command는 `pip install -r requirements.txt`로 고정한다.
+- 무료 plan에는 pre-deploy command가 없으므로 start command는 `alembic upgrade head && uvicorn app.main:create_app --factory --host 0.0.0.0 --port $PORT`로 고정한다.
+- migration이 실패하면 Uvicorn을 실행하지 않아 새 deploy를 실패 처리한다.
+- 운영 `DATABASE_URL`, `SESSION_SECRET`, `AI_API_KEY`는 Render Secret Environment Variables로만 저장한다.
+- Supabase 연결은 pooler가 제공하는 PostgreSQL URL과 TLS를 사용하고 실제 연결 문자열은 저장소나 GitHub Actions에 넣지 않는다.
+- Render 로컬 파일에 사용자 데이터·백업을 저장하지 않는다.
+- Render가 제공하는 HTTPS `onrender.com` URL을 사용하며 별도 Nginx, systemd, SSH 서버와 GitHub Actions CD workflow는 두지 않는다.
 
-#### EC2 스크립트 책임
+무료 plan 제약은 문서와 시연 절차에 명시한다.
 
-Ubuntu 24.04 LTS EC2 한 대를 대상으로 스크립트 두 개만 유지한다.
+- Render는 일정 시간 요청이 없으면 sleep하고 첫 요청에서 cold start가 발생할 수 있으므로 발표 전에 URL을 한 번 호출한다.
+- Supabase 무료 프로젝트는 장기간 비활성 상태에서 pause될 수 있으므로 평가 전 대시보드에서 상태와 DB 연결을 확인한다.
+- 무료 plan 한도 또는 정책 변경에 대비해 평가 직전 `/health`, 회원가입, 질문, 기록 조회를 전체 리허설한다.
+- Render/Supabase 장애 시 자동 우회 배포는 만들지 않고 서비스 대시보드 상태와 로그를 확인한다.
 
-| 스크립트 | 책임 |
-| --- | --- |
-| `setup.sh` | Python·Nginx 설치, `chatbot` 사용자와 운영 디렉터리·venv 생성, systemd/Nginx 설정 설치 |
-| `deploy.sh <commit-sha>` | 지정 commit checkout, 의존성 설치, SQLite 백업, `alembic upgrade head`, 서비스 재시작과 `/health` 확인 |
-
-두 스크립트는 `set -Eeuo pipefail`을 사용한다. AWS 키, SSH 키, `SESSION_SECRET`, `AI_API_KEY`는 스크립트에 넣지 않고 `/etc/chatbot/chatbot.env`에서 읽는다. 자동 롤백, 범용 설정 계층과 별도 검증 스크립트는 만들지 않는다. 문제가 생기면 SQLite 백업과 이전 commit으로 수동 복구한다.
-
-기본 운영 경로와 값은 다음으로 고정한다.
-
-```text
-APP_USER=chatbot
-SERVICE_NAME=chatbot
-APP_DIR=/srv/chatbot/app
-DATA_DIR=/srv/chatbot/data
-BACKUP_DIR=/srv/chatbot/backups
-ENV_FILE=/etc/chatbot/chatbot.env
-APP_BIND=127.0.0.1:8000
-```
-
-Nginx만 외부의 80/443 포트를 받고 FastAPI는 loopback 주소에서만 수신한다. `DOMAIN`은 실제 도메인을 환경 변수로 전달하며, 값이 없으면 인증서 발급 단계를 실행하지 않는다.
-
-EC2 스크립트를 구현할 때 다음 항목을 확정한다.
-
-- 운영체제는 Ubuntu 24.04 LTS를 기본값으로 한다.
-- 보안 그룹과 SSH 접근 정책
-- 도메인, TLS 인증서와 리버스 프록시
-- systemd 등 FastAPI 프로세스 관리 방식
-- SQLite 영속 경로, 소유권, 백업과 복구
-- 초기에는 운영자가 `deploy.sh <commit-sha>`를 실행하고 GitHub Actions 기반 CD는 후속 범위로 둔다.
-- 장애 발생 시 롤백과 로그 확인 절차
+무료 plan의 최신 제한은 [Render Free 문서](https://render.com/docs/free)와 [Supabase Free project pause 문서](https://supabase.com/docs/guides/platform/free-project-pausing)를 기준으로 배포 직전에 다시 확인한다.
 
 평가자가 DB를 확인할 수 있도록 다음 방법을 준비한다.
 
@@ -428,7 +398,7 @@ README에 반드시 포함할 내용:
 - DB 로그 확인 화면/API 사용법
 - 브랜치 전략과 PR 규칙
 - 팀 역할과 개인별 실제 작업 요약
-- 배포가 완료된 뒤 EC2 URL과 운영 절차
+- 배포가 완료된 뒤 Render URL, Supabase 연결 방식과 cold start 대응 절차
 - Alembic revision 생성·리뷰·upgrade·downgrade 규칙
 
 배포 전에는 Git 전체 이력에서도 비밀값 노출 여부를 확인한다. 한 번 커밋된 키는 파일에서 지우는 것만으로 부족하므로 즉시 폐기·재발급하고 이력 정리 여부를 판단해야 한다.
@@ -532,7 +502,7 @@ docs/*     문서 변경 브랜치
 - 브랜치/PR/커밋 규칙과 코드 스타일 합의
 - FastAPI 골격, 설정, DB 연결, Alembic, PR 자동 검증 골격 생성
 
-종료 조건: 세 팀원이 동일한 방법으로 앱을 실행하고, 빈 SQLite에 `alembic upgrade head`를 적용한 뒤 테스트를 통과한다.
+종료 조건: 세 팀원이 Docker Compose PostgreSQL로 앱을 실행하고, 빈 테스트 DB에 `alembic upgrade head`를 적용한 뒤 테스트를 통과한다.
 
 ### M1. 인증 가능한 웹 앱
 
@@ -556,8 +526,8 @@ docs/*     문서 변경 브랜치
 - 내 대화 기록 화면/API와 확인용 SQL
 - 권한 격리 및 장애 테스트
 - README, API 명세, ERD, 역할/작업 요약
-- EC2 bootstrap·서비스 설치·배포·검증·롤백 스크립트
-- AWS EC2 최종 배포, DB 백업과 외부 접속 확인
+- Supabase PostgreSQL 연결과 운영 migration 검증
+- Render GitHub 연동·자동 배포와 외부 접속 확인
 
 종료 조건: 필수 인수 테스트와 평가 체크리스트가 모두 통과한다.
 
@@ -576,17 +546,16 @@ docs/*     문서 변경 브랜치
 
 | 확장               | 도입 조건                                         | 추가 구현                                  | 주의점                            |
 | ---------------- | --------------------------------------------- | -------------------------------------- | ------------------------------ |
-| PostgreSQL       | 향후 EC2 단일 인스턴스 범위를 벗어나 다중 인스턴스가 필요 | 드라이버, 별도 DB 배포, 백업/연결 설정               | 현재 기본 스택에서 제외                  |
+| 운영 DB 유료 전환     | 무료 Supabase의 용량·일시정지 제한이 문제가 될 때                | 유료 plan, 백업·복구 정책                     | 과제 범위에서는 무료 plan 유지              |
 | React/Vue 프론트 분리 | 팀원이 SPA 경험이 있고 UI 상호작용이 핵심                    | CORS, 별도 빌드/배포, API 인증 설계              | 과제 핵심보다 통합 비용이 커질 수 있음         |
 | HTMX             | Jinja2를 유지하며 부분 갱신을 간결하게 만들고 싶을 때             | HTML fragment 응답                       | 팀 전체가 패턴을 익혀야 함                |
 | 응답 스트리밍(SSE)     | 긴 AI 응답의 체감 대기 시간을 개선할 때                      | 스트림 API, 중단/실패 UI, 저장 시점 정의            | 테스트와 오류 처리가 복잡해짐               |
 | 대화방/새 대화         | 사용자별 여러 주제를 분리할 필요가 있을 때                      | `conversations` 테이블과 `conversation_id` | 권한 검사 대상 증가                    |
 | Redis            | 서버를 여러 인스턴스로 확장하거나 세션/제한 상태 공유 필요             | Redis 배포, 만료 정책                        | MVP 단일 인스턴스에는 과할 수 있음          |
-| Docker Compose   | 로컬·CI 환경 차이를 줄이고 PostgreSQL 등을 함께 실행          | Dockerfile, compose, 헬스체크              | EC2 배포 설계 단계에서 재검토             |
 | 관리자 대시보드         | 운영자가 전체 로그를 확인해야 할 때                          | 관리자 역할, 감사 로그, 강한 권한 검사                | 개인정보 노출 위험 증가                  |
 
 
-권장 확장 순서는 `자동 테스트/CI → 대화방 → PostgreSQL → 스트리밍`이다. React/Vue, Redis, 관리자 기능은 명확한 필요가 있을 때만 선택한다.
+권장 확장 순서는 `자동 테스트/CI → 대화방 → 스트리밍`이다. React/Vue, Redis, 관리자 기능은 명확한 필요가 있을 때만 선택한다.
 
 ### 기술 결정 시 확인할 질문
 
@@ -616,15 +585,14 @@ docs/*     문서 변경 브랜치
 | 위험              | 조기 신호                     | 대응                                          |
 | --------------- | ------------------------- | ------------------------------------------- |
 | API 키 노출        | 키를 코드/PR에 붙여 넣음           | `.env.example`, secret scan, 노출 키 즉시 폐기·재발급 |
-| SQLite 데이터 유실   | 잘못된 Alembic revision이 운영 DB에 적용됨 | 적용 전 DB 백업, revision 리뷰, PR 임시 DB 검증             |
-| PR이 운영 DB를 변경   | PR 워크플로에 운영 경로나 토큰이 포함됨   | PR은 임시 SQLite만 사용하고 운영 secrets를 전달하지 않음     |
+| 운영 DB migration 오류 | 잘못된 Alembic revision이 Supabase에 적용됨 | additive migration 우선, revision 리뷰, PR 임시 DB 검증       |
+| PR이 운영 DB를 변경   | PR 워크플로에 운영 연결 문자열이 포함됨    | CI PostgreSQL service만 사용하고 운영 secrets를 전달하지 않음 |
 | Alembic head 충돌   | 두 PR이 서로 다른 head revision을 생성 | PR 병합 전 최신 `main` 기준으로 revision을 재생성하거나 merge revision 추가 |
-| EC2 서비스 중단      | 프로세스·인스턴스·인증서 문제로 URL 비활성화 | 상태 확인, 로그·재시작 절차와 평가 전 리허설 준비              |
-| EC2 구성 오류       | 보안 그룹·프로세스·HTTPS 설정 누락       | 배포 설계 문서와 체크리스트를 별도로 작성하고 전체 리허설 수행       |
-| EC2 스크립트 재실행 실패 | 두 번째 실행에서 사용자·파일·설정 충돌 | idempotent 검사, 임시 파일 검증, 테스트 인스턴스 재실행 검증         |
-| 비밀값 커밋          | 스크립트나 템플릿에 실제 운영 값 포함     | 저장소 밖 환경 파일, 예시값만 커밋, secret scan                    |
-| 외부 AI API 실패    | 로컬에서는 되지만 EC2에서 호출 실패      | EC2 네트워크와 공급자 설정 확인 후 배포 환경에서 실제 호출 테스트    |
-| 디스크 공간 부족      | 로그·백업·DB가 볼륨 한도에 근접          | 로그 로테이션, 백업 개수 제한, 주기적 디스크 사용량 확인           |
+| Render cold start | 첫 접속이 오래 걸리거나 health check가 지연됨 | 평가 전 사전 호출, 로딩 안내, 배포 URL 리허설                  |
+| Supabase pause   | 장기 비활성 후 DB 연결 실패             | 평가 전 프로젝트 상태 확인과 resume, 연결 재검증               |
+| 무료 한도 초과        | 배포·대역폭·DB 용량 제한 경고            | 대시보드 사용량 확인, 불필요한 배포와 대용량 로그 억제             |
+| 비밀값 커밋          | 설정 파일에 실제 운영 값 포함            | Render secret 환경 변수, 예시값만 커밋, secret scan           |
+| 외부 AI API 실패    | 로컬에서는 되지만 Render에서 호출 실패   | Render 환경 변수와 공급자 설정 확인 후 배포 환경에서 실제 호출 테스트 |
 | AI API 불안정/비용   | 테스트가 느리거나 호출량 급증          | 가짜 AI, 타임아웃, 공급자 사용량 점검                     |
 | 사용자 간 기록 노출     | ID만으로 대화 조회               | 모든 쿼리에 현재 `user_id` 조건, 격리 테스트              |
 | 문맥 길이 초과        | 대화가 길어질수록 API 오류          | 최근 N개 제한, 길이 예산, P1 요약 전략                   |
@@ -658,16 +626,15 @@ docs/*     문서 변경 브랜치
 - [ ] `.env`가 제외되고 `.env.example`과 환경 변수 설명이 있다.
 - [ ] 비밀번호는 해시로 저장되고 비밀값/대화 원문은 로그에 남지 않는다.
 - [ ] 외부 네트워크에서 배포 URL에 접속할 수 있다.
-- [ ] EC2 서비스, HTTPS와 외부 URL이 평가 기간 동안 정상 동작한다.
-- [ ] SQLite가 Git 저장소 밖의 영속 경로에 있고 최신 백업이 있다.
+- [ ] Render HTTPS URL과 `/health`가 평가 기간 동안 정상 동작한다.
+- [ ] 운영 데이터가 Supabase PostgreSQL에 저장되고 재배포 후에도 유지된다.
 - [ ] 배포 환경에서 선택한 AI API를 실제로 호출할 수 있다.
-- [ ] PR에서 임시 SQLite에 `alembic upgrade head`를 적용한 뒤 테스트가 자동 실행된다.
-- [ ] EC2 배포에서 DB 백업 후 `alembic upgrade head`가 명시적으로 실행된다.
-- [ ] Alembic 실패 시 새 버전 시작을 중단하고 DB를 복구할 수 있다.
-- [ ] EC2 설정과 배포가 `scripts/ec2/`의 버전 관리된 스크립트로 재현된다.
-- [ ] EC2 스크립트가 `bash -n`과 ShellCheck를 통과하고 두 번 실행해도 실패하지 않는다.
-- [ ] systemd·Nginx 설정은 문법 검증을 통과한 경우에만 반영된다.
-- [ ] 운영 비밀값과 SSH/AWS 자격 증명이 스크립트와 Git 이력에 없다.
+- [ ] PR에서 격리된 PostgreSQL에 `alembic upgrade head`를 적용한 뒤 테스트가 자동 실행된다.
+- [ ] Render 시작 단계에서 `alembic upgrade head`가 성공한 뒤 앱이 실행된다.
+- [ ] migration 실패 시 새 deploy가 실패하고 원인을 Render 로그에서 확인할 수 있다.
+- [ ] `render.yaml`의 build/start/health check 설정이 실제 서비스 설정과 일치한다.
+- [ ] 운영 비밀값과 Supabase 연결 문자열이 코드와 Git 이력에 없다.
+- [ ] cold start와 Supabase pause 상황을 평가 전에 점검했다.
 - [ ] 평가자가 API 또는 화면으로 DB 로그를 확인할 수 있다.
 
 
@@ -687,9 +654,9 @@ docs/*     문서 변경 브랜치
 - 서비스의 구체적 타겟 사용자와 챗봇 주제
 - AI 공급자와 모델, 호출 비용 한도
 - 사용자 식별자(이메일 또는 사용자명)와 세션 쿠키 만료 시간
-- AWS 계정 소유자, EC2 접근 권한과 복구 수단
-- EC2 AMI, 인스턴스 사용자, 도메인과 운영 디렉터리 기본값
-- SQLite DB 및 서버 `.env`의 실제 절대 경로
+- Render/Supabase 계정 소유자와 팀원 접근 권한
+- Render 서비스 이름, 리전과 GitHub `main` 자동 배포 설정
+- Supabase 프로젝트와 운영 `DATABASE_URL` 관리 담당자
 - 최근 문맥 N 값과 대화방 기능 포함 여부
 - 배포 담당, 백업 담당, 리뷰어 순번, 정기 통합 시간
 - P1 확장 기능 최대 1~2개와 포기 기준
