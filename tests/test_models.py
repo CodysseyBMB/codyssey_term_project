@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models import Conversation, Message, User
@@ -71,3 +74,38 @@ def test_conversation_messages_follow_insert_order(db_session: Session) -> None:
 
     assert [m.role for m in conversation.messages] == ["user", "assistant"]
     assert conversation.messages[0].conversation is conversation
+
+
+def test_message_role_must_be_user_or_assistant(db_session: Session) -> None:
+    conversation = Conversation(user=make_user())
+    db_session.add(Message(conversation=conversation, role="system", content="x"))
+
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_conversation_requires_existing_user(db_session: Session) -> None:
+    db_session.add(Conversation(user_id=999_999))
+
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_message_requires_content(db_session: Session) -> None:
+    conversation = Conversation(user=make_user())
+    db_session.add(Message(conversation=conversation, role="user"))
+
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_deleting_conversation_removes_its_messages(db_session: Session) -> None:
+    conversation = Conversation(user=make_user())
+    conversation.messages.append(Message(role="user", content="질문"))
+    db_session.add(conversation)
+    db_session.flush()
+
+    db_session.delete(conversation)
+    db_session.flush()
+
+    assert db_session.scalars(select(Message)).all() == []
