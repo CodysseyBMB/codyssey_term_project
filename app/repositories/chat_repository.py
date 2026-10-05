@@ -3,7 +3,11 @@ from __future__ import annotations
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Conversation
+from app.models import Conversation, Message
+
+
+class ConversationNotFoundError(LookupError):
+    """대화가 없거나 요청한 사용자의 소유가 아닐 때 발생한다."""
 
 
 def create_conversation(
@@ -36,5 +40,46 @@ def list_conversations(
         .order_by(Conversation.created_at.desc(), Conversation.id.desc())
         .limit(limit)
         .offset(offset)
+    )
+    return list(session.scalars(statement))
+
+
+def add_message(
+    session: Session,
+    user_id: int,
+    conversation_id: int,
+    role: str,
+    content: str,
+    ai_model: str | None = None,
+    latency_ms: int | None = None,
+) -> Message:
+    """본인 대화에만 메시지를 추가한다. 소유자가 아니면 ConversationNotFoundError."""
+    conversation = get_conversation(session, user_id, conversation_id)
+    if conversation is None:
+        raise ConversationNotFoundError(conversation_id)
+    message = Message(
+        conversation_id=conversation.id,
+        role=role,
+        content=content,
+        ai_model=ai_model,
+        latency_ms=latency_ms,
+    )
+    session.add(message)
+    session.flush()
+    return message
+
+
+def list_messages(
+    session: Session, user_id: int, conversation_id: int
+) -> list[Message]:
+    """본인 대화의 메시지를 시간순으로 반환한다. 소유자가 아니면 빈 목록."""
+    statement = (
+        select(Message)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == user_id,
+        )
+        .order_by(Message.created_at, Message.id)
     )
     return list(session.scalars(statement))
