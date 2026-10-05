@@ -56,6 +56,7 @@ def settings(migrated_database_url: str) -> Settings:
         _env_file=None,
         app_env="test",
         database_url=migrated_database_url,
+        session_secret="test-session-secret-with-at-least-32-characters",
     )
 
 
