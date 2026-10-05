@@ -9,6 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db import Base
 
 if TYPE_CHECKING:
+    from app.models.message import Message
     from app.models.users import User
 
 
@@ -25,3 +26,9 @@ class Conversation(Base):
     )
 
     user: Mapped[User] = relationship()
+    messages: Mapped[list[Message]] = relationship(
+        back_populates="conversation",
+        order_by="(Message.created_at, Message.id)",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
