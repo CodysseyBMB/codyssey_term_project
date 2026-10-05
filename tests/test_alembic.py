@@ -28,3 +28,16 @@ def test_upgrade_head_is_idempotent(database_url: str, monkeypatch) -> None:
     # 이제 users 테이블 리비전이 생겼으니 "현재 DB 리비전 == 스크립트상의 head"로 비교한다.
     head_revision = ScriptDirectory.from_config(config).get_current_head()
     assert current_revision(database_url) == head_revision
+
+
+def test_downgrade_and_upgrade_again(database_url: str, monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    config = make_alembic_config(database_url)
+    head_revision = ScriptDirectory.from_config(config).get_current_head()
+
+    command.upgrade(config, "head")
+    command.downgrade(config, "base")
+    assert current_revision(database_url) is None
+
+    command.upgrade(config, "head")
+    assert current_revision(database_url) == head_revision
