@@ -21,3 +21,8 @@ label { display: grid; gap: .4rem; font-size: .85rem; color: #94a3b8; }
 input { padding: .6rem .75rem; border-radius: .5rem; border: 1px solid #334155; background: #0b1020; color: #eef2ff; font: inherit; }
 button { padding: .65rem 1rem; border-radius: .5rem; border: none; background: #818cf8; color: #0b1020; font-weight: 700; cursor: pointer; }
 .error { color: #fca5a5; font-size: .85rem; margin: .5rem 0 0; }
+.auth-actions { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.5rem; }
+.auth-actions form, form.auth-actions { display: flex; margin-top: 1.5rem; }
+.button { padding: .65rem 1rem; border-radius: .5rem; background: #818cf8; color: #0b1020; font-weight: 700; text-decoration: none; }
+.button.secondary { border: 1px solid #818cf8; background: transparent; color: #c7d2fe; }
+.auth-guide { margin-top: 1.25rem; color: #94a3b8; font-size: .9rem; }

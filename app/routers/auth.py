@@ -2,17 +2,76 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
-from app.security import hash_password
+from app.security import hash_password, verify_password
 from app.templating import templates
 
 # APIRouter = 경로들의 묶음. main.py에서 include_router()로 앱에 연결한다.
 # prefix="/auth"를 주면 아래 "/signup"은 실제로 "/auth/signup"이 된다.
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+INVALID_CREDENTIALS_MESSAGE = "아이디 또는 비밀번호가 올바르지 않습니다."
+
+
+@router.get("/login", response_class=HTMLResponse)
+def login_form(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="login.html",
+        context={"error": None, "username": ""},
+    )
+
+
+@router.post("/login", response_class=HTMLResponse)
+def login(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    username = username.strip()
+    if not (3 <= len(username) <= 20) or not (8 <= len(password) <= 100):
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={
+                "error": "아이디는 3~20자, 비밀번호는 8~100자 사이로 입력해주세요.",
+                "username": username,
+            },
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+
+    user = db.scalar(select(User).where(User.username == username))
+    if user is None or not verify_password(password, user.password_hash):
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={"error": INVALID_CREDENTIALS_MESSAGE, "username": username},
+            status_code=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    request.session.clear()
+    request.session["user_id"] = user.id
+    return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.post("/logout")
+def logout(request: Request):
+    request.session.clear()
+    response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    response.delete_cookie(
+        "session",
+        path="/",
+        secure=request.app.state.settings.is_production,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 @router.get("/signup", response_class=HTMLResponse)
 def signup_form(request: Request):
