@@ -195,25 +195,30 @@ users
 - password_hash      VARCHAR NOT NULL
 - created_at         DATETIME NOT NULL
 
-chats
+conversations
 - id                 INTEGER PK
 - user_id            INTEGER FK(users.id) NOT NULL, INDEX
-- question           TEXT NOT NULL
-- answer             TEXT NOT NULL
+- title              VARCHAR(200) NULL
 - created_at         DATETIME NOT NULL, INDEX
-- request_id         VARCHAR UNIQUE NOT NULL
-- ai_model            VARCHAR NULL
-- latency_ms         INTEGER NULL
+
+messages
+- id                 INTEGER PK
+- conversation_id    INTEGER FK(conversations.id, ON DELETE CASCADE) NOT NULL, INDEX
+- role               VARCHAR(20) NOT NULL, CHECK(role IN ('user', 'assistant'))
+- content            TEXT NOT NULL
+- created_at         DATETIME NOT NULL, INDEX
+- ai_model           VARCHAR(100) NULL   -- assistant 메시지에만 기록
+- latency_ms         INTEGER NULL        -- assistant 메시지에만 기록
 ```
 
-과제의 최소 추적 필드는 `user_id`, `created_at`, `question`, `answer`이다. `request_id`, 모델명, 지연 시간은 장애 추적과 시연에 유용해 함께 저장한다. 시간은 DB에 UTC로 저장하고 화면에서 로컬 시간대로 표시한다.
+과제의 최소 추적 필드는 `user_id`, `created_at`, `question`, `answer`이다. 사용자 질문은 `role=user`, AI 답변은 `role=assistant` 메시지로 저장하고, 소유자는 `conversations.user_id`로 추적한다. 모델명과 지연 시간은 장애 추적과 시연에 유용해 답변 메시지에 함께 저장한다. 시간은 DB에 UTC로 저장하고 화면에서 로컬 시간대로 표시한다.
 
 조회 구현:
 
 - `GET /api/me/chats?limit=20&offset=0`: 현재 사용자의 기록만 최신순으로 반환
 - `GET /history`: 위 데이터를 이용해 사람이 확인 가능한 화면 제공
 
-객체 ID를 요청받는 API를 추가할 경우 반드시 `chat.user_id == current_user.id`를 검사한다. 단순히 ID로만 조회하면 다른 사용자의 대화가 노출될 수 있다.
+객체 ID를 요청받는 API를 추가할 경우 반드시 `conversation.user_id == current_user.id`를 검사한다. 단순히 ID로만 조회하면 다른 사용자의 대화가 노출될 수 있다. `app/repositories/chat_repository.py`의 `get_conversation`, `list_messages`, `add_message`는 조회 조건에 `user_id`를 포함하므로 이 검사를 내장한다.
 
 #### Alembic 마이그레이션 관리
 
