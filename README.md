@@ -30,6 +30,8 @@ PostgreSQL 데이터는 `postgres_data` 볼륨에 유지됩니다. 데이터를 
 | 경로 | 역할 |
 | --- | --- |
 | `/` | 스켈레톤 준비 화면 |
+| `/auth/signup` | 회원가입 화면 |
+| `/auth/login` | 로그인 화면 |
 | `/health` | 외부 의존성과 무관한 프로세스 상태 |
 | `/docs` | FastAPI OpenAPI UI |
 
@@ -39,6 +41,7 @@ PostgreSQL 데이터는 `postgres_data` 볼륨에 유지됩니다. 데이터를 
 | --- | --- | --- |
 | `APP_ENV` | 아니요 | `development`; 운영에서는 `production` |
 | `DATABASE_URL` | 아니요 | Compose 내부 PostgreSQL URL; Render에서는 Internal Database URL |
+| `SESSION_SECRET` | 예 | 32자 이상의 임의 문자열; 운영 값은 Render Secret Environment Variable로만 저장 |
 
 로컬 Compose 설정은 과제 개발용 계정만 사용합니다. Render의 실제 `DATABASE_URL`과 그 밖의 비밀값은 Render 환경변수에만 저장하고 Git에 커밋하지 않습니다.
 
