@@ -14,3 +14,10 @@ dl div { display: flex; justify-content: space-between; gap: 1rem; padding: .75r
 dt { color: #94a3b8; }
 dd { margin: 0; }
 a { color: #a5b4fc; }
+
+/* 기존 index.html의 .container/.status-card와 같은 톤을 맞춘다 */
+form { display: grid; gap: 1rem; margin-top: 1.5rem; }
+label { display: grid; gap: .4rem; font-size: .85rem; color: #94a3b8; }
+input { padding: .6rem .75rem; border-radius: .5rem; border: 1px solid #334155; background: #0b1020; color: #eef2ff; font: inherit; }
+button { padding: .65rem 1rem; border-radius: .5rem; border: none; background: #818cf8; color: #0b1020; font-weight: 700; cursor: pointer; }
+.error { color: #fca5a5; font-size: .85rem; margin: .5rem 0 0; }
