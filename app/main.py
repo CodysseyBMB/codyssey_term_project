@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import Settings, get_settings
+from app.access_control import get_current_user, get_or_create_csrf_token
 from app.db import create_database_engine, create_session_factory
+from app.models import User
 from app.routers import auth
 from app.templating import TEMPLATES_DIR, templates
 
@@ -34,13 +36,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(auth.router)
 
     @app.get("/", response_class=HTMLResponse)
-    def index(request: Request):
+    def index(
+        request: Request,
+        current_user: User | None = Depends(get_current_user),
+    ):
         return templates.TemplateResponse(
             request=request,
             name="index.html",
             context={
                 "app_env": settings.app_env,
-                "is_authenticated": request.session.get("user_id") is not None,
+                "is_authenticated": current_user is not None,
+                "csrf_token": (
+                    get_or_create_csrf_token(request)
+                    if current_user is not None
+                    else None
+                ),
             },
         )
 

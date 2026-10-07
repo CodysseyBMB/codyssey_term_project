@@ -6,6 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.access_control import (
+    get_or_create_csrf_token,
+    require_form_csrf,
+    require_page_user,
+)
 from app.db import get_db
 from app.models import User
 from app.security import hash_password, verify_password
@@ -23,7 +28,11 @@ def login_form(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="login.html",
-        context={"error": None, "username": ""},
+        context={
+            "error": None,
+            "username": "",
+            "csrf_token": get_or_create_csrf_token(request),
+        },
     )
 
 
@@ -32,6 +41,7 @@ def login(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
+    _csrf: None = Depends(require_form_csrf),
     db: Session = Depends(get_db),
 ):
     username = username.strip()
@@ -42,6 +52,7 @@ def login(
             context={
                 "error": "아이디는 3~20자, 비밀번호는 8~100자 사이로 입력해주세요.",
                 "username": username,
+                "csrf_token": get_or_create_csrf_token(request),
             },
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
@@ -51,7 +62,11 @@ def login(
         return templates.TemplateResponse(
             request=request,
             name="login.html",
-            context={"error": INVALID_CREDENTIALS_MESSAGE, "username": username},
+            context={
+                "error": INVALID_CREDENTIALS_MESSAGE,
+                "username": username,
+                "csrf_token": get_or_create_csrf_token(request),
+            },
             status_code=status.HTTP_401_UNAUTHORIZED,
         )
 
@@ -61,7 +76,11 @@ def login(
 
 
 @router.post("/logout")
-def logout(request: Request):
+def logout(
+    request: Request,
+    _current_user: User = Depends(require_page_user),
+    _csrf: None = Depends(require_form_csrf),
+):
     request.session.clear()
     response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     response.delete_cookie(
@@ -79,7 +98,10 @@ def signup_form(request: Request):
     return templates.TemplateResponse(
         request = request,
         name = "signup.html",
-        context={"error": None},
+        context={
+            "error": None,
+            "csrf_token": get_or_create_csrf_token(request),
+        },
     )
 
 @router.post("/signup", response_class=HTMLResponse)
@@ -87,6 +109,7 @@ def signup(
     request: Request,
     username: str = Form(...),
     password: str = Form(...), # Form(...)의 ...은 필수값이라는 뜻
+    _csrf: None = Depends(require_form_csrf),
     db: Session = Depends(get_db), # get_db가 세션을 자동으로 넣어준다.
 ):
     username = username.strip()
@@ -96,7 +119,10 @@ def signup(
         return templates.TemplateResponse(
             request = request,
             name = "signup.html",
-            context = {"error": "아이디는 3~20자, 비밀번호는 8~100자 사이로 입력해주세요."},
+            context = {
+                "error": "아이디는 3~20자, 비밀번호는 8~100자 사이로 입력해주세요.",
+                "csrf_token": get_or_create_csrf_token(request),
+            },
             status_code = 422,
         )
 
@@ -112,7 +138,10 @@ def signup(
         return templates.TemplateResponse(
             request = request,
             name="signup.html",
-            context={"error": "이미 사용 중인 아이디입니다."},
+            context={
+                "error": "이미 사용 중인 아이디입니다.",
+                "csrf_token": get_or_create_csrf_token(request),
+            },
             status_code = 409,
         )
 
