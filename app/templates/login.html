@@ -13,6 +13,7 @@
         <h1>다시 만나서 반가워요</h1>
         {% if error %}<p class="error">{{ error }}</p>{% endif %}
         <form method="post" action="/auth/login">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <label>아이디
             <input type="text" name="username" value="{{ username }}" required minlength="3" maxlength="20" autocomplete="username">
           </label>
