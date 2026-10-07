@@ -3,6 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,6 +21,11 @@ class Settings(BaseSettings):
 
     app_env: str = "development"
     database_url: str = "postgresql://chatbot:chatbot@postgres:5432/chatbot"
+    session_secret: str = Field(min_length=32)
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == "production"
 
 
 @lru_cache

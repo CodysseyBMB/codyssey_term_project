@@ -7,3 +7,4 @@ uvicorn==0.37.0
 psycopg2-binary==2.9.11
 argon2-cffi==21.3.0
 python-multipart==0.0.20
+itsdangerous==2.2.0
