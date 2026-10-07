@@ -6,14 +6,24 @@ from sqlalchemy.orm import Session
 
 from app.models import User
 from app.security import verify_password
+from tests.helpers import get_csrf_token
+
+
+def signup(client: TestClient, username: str, password: str):
+    csrf_token = get_csrf_token(client, "/auth/signup")
+    return client.post(
+        "/auth/signup",
+        data={
+            "username": username,
+            "password": password,
+            "csrf_token": csrf_token,
+        },
+        follow_redirects=False,
+    )
 
 
 def test_signup_success_hashes_password(client: TestClient, db_session: Session) -> None:
-    response = client.post(
-        "/auth/signup",
-        data={"username": "whale01", "password": "sea-shanty-9"},
-        follow_redirects=False,  # 리다이렉트를 따라가지 않고 303 자체를 확인
-    )
+    response = signup(client, "whale01", "sea-shanty-9")
 
     assert response.status_code == 303
 
@@ -26,19 +36,15 @@ def test_signup_success_hashes_password(client: TestClient, db_session: Session)
 
 def test_signup_rejects_duplicate_username(client: TestClient) -> None:
     # 완료 조건 2번 검증: 같은 아이디로 두 번 가입하면 두 번째는 거부
-    payload = {"username": "whale02", "password": "sea-shanty-9"}
-    client.post("/auth/signup", data=payload)
+    signup(client, "whale02", "sea-shanty-9")
 
-    response = client.post("/auth/signup", data=payload)
+    response = signup(client, "whale02", "sea-shanty-9")
 
     assert response.status_code == 409
 
 
 def test_signup_rejects_short_password(client: TestClient) -> None:
     # 입력 검증 요구사항: 최소 1개 이상의 검증 로직이 있어야 한다
-    response = client.post(
-        "/auth/signup",
-        data={"username": "whale03", "password": "short"},
-    )
+    response = signup(client, "whale03", "short")
 
     assert response.status_code == 422
