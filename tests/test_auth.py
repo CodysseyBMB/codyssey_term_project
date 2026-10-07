@@ -135,6 +135,7 @@ def test_production_cookie_is_secure(
         app_env="production",
         database_url=settings.database_url,
         session_secret=settings.session_secret,
+        ai_api_key=settings.ai_api_key,
     )
 
     with TestClient(
