@@ -9,7 +9,7 @@ def test_index_renders_skeleton_page(client: TestClient) -> None:
     assert "AI Chatbot 프로젝트" in response.text
 
 
-def test_health_does_not_depend_on_database(client: TestClient) -> None:
+def test_health_works_without_database(client: TestClient) -> None:
     client.app.state.engine.dispose()
 
     response = client.get("/health")

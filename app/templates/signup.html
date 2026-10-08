@@ -14,6 +14,7 @@
         {# error가 None이 아니면(=로그인 실패 메시지가 있으면) 보여준다 #}
         {% if error %}<p class="error">{{ error }}</p>{% endif %}
         <form method="post" action="/auth/signup">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <label>아이디
             <input type="text" name="username" required minlength="3" maxlength="50">
           </label>

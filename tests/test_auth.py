@@ -11,6 +11,7 @@ from app.config import Settings
 from app.main import create_app
 from app.models import User
 from app.security import hash_password
+from tests.helpers import get_csrf_token
 
 
 def create_user(db_session: Session, username: str = "whale01") -> User:
@@ -25,9 +26,14 @@ def create_user(db_session: Session, username: str = "whale01") -> User:
 
 
 def login(client: TestClient, username: str = "whale01", password: str = "sea-shanty-9"):
+    csrf_token = get_csrf_token(client, "/auth/login")
     return client.post(
         "/auth/login",
-        data={"username": username, "password": password},
+        data={
+            "username": username,
+            "password": password,
+            "csrf_token": csrf_token,
+        },
         follow_redirects=False,
     )
 
@@ -69,6 +75,7 @@ def test_login_trims_username(client: TestClient, db_session: Session) -> None:
 def test_login_uses_same_error_for_unknown_user_and_wrong_password(
     client: TestClient,
     db_session: Session,
+    settings: Settings,
 ) -> None:
     create_user(db_session)
 
@@ -79,7 +86,8 @@ def test_login_uses_same_error_for_unknown_user_and_wrong_password(
     assert wrong_password.status_code == 401
     assert "아이디 또는 비밀번호가 올바르지 않습니다." in unknown_user.text
     assert "아이디 또는 비밀번호가 올바르지 않습니다." in wrong_password.text
-    assert "session" not in client.cookies
+    session = decode_session_cookie(client.cookies["session"], settings.session_secret)
+    assert "user_id" not in session
 
 
 def test_login_rejects_invalid_length(client: TestClient) -> None:
@@ -114,14 +122,24 @@ def test_logout_clears_session_and_is_idempotent(
     create_user(db_session)
     login(client)
 
-    first_logout = client.post("/auth/logout", follow_redirects=False)
-    second_logout = client.post("/auth/logout", follow_redirects=False)
+    csrf_token = get_csrf_token(client, "/")
+    first_logout = client.post(
+        "/auth/logout",
+        data={"csrf_token": csrf_token},
+        follow_redirects=False,
+    )
+    second_logout = client.post(
+        "/auth/logout",
+        data={"csrf_token": csrf_token},
+        follow_redirects=False,
+    )
 
     assert first_logout.status_code == 303
     assert first_logout.headers["location"] == "/"
     assert "session" not in client.cookies
     assert "expires=thu, 01 jan 1970" in first_logout.headers["set-cookie"].lower()
     assert second_logout.status_code == 303
+    assert second_logout.headers["location"] == "/auth/login"
     assert ">로그인<" in client.get("/").text
 
 
@@ -154,4 +172,5 @@ def test_tampered_cookie_is_ignored_on_logout(client: TestClient) -> None:
     response = client.post("/auth/logout", follow_redirects=False)
 
     assert response.status_code == 303
-    assert "session" not in client.cookies
+    assert response.headers["location"] == "/auth/login"
+    assert ">로그인<" in client.get("/").text

@@ -16,6 +16,7 @@
         {% if is_authenticated %}
           <p>로그인 상태입니다.</p>
           <form class="auth-actions" method="post" action="/auth/logout">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit">로그아웃</button>
           </form>
         {% else %}
