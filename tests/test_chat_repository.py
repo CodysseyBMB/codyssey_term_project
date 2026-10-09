@@ -11,6 +11,7 @@ from app.repositories.chat_repository import (
     get_conversation,
     list_conversations,
     list_messages,
+    list_recent_messages,
 )
 
 
@@ -141,3 +142,32 @@ def test_message_added_to_own_conversation_is_visible_via_get(
 
     assert found is not None
     assert [m.content for m in found.messages] == ["질문"]
+
+
+def test_list_recent_messages_returns_latest_conversations_in_chronological_order(
+    db_session: Session,
+) -> None:
+    alice = make_user(db_session, "alice")
+    bob = make_user(db_session, "bob")
+    for index in range(1, 7):
+        conversation = create_conversation(db_session, alice.id)
+        add_message(db_session, alice.id, conversation.id, "user", f"q{index}")
+        add_message(db_session, alice.id, conversation.id, "assistant", f"a{index}")
+    bob_conversation = create_conversation(db_session, bob.id)
+    add_message(db_session, bob.id, bob_conversation.id, "user", "bob question")
+    add_message(db_session, bob.id, bob_conversation.id, "assistant", "bob answer")
+
+    messages = list_recent_messages(db_session, alice.id, conversation_limit=5)
+
+    assert [(message.role, message.content) for message in messages] == [
+        ("user", "q2"),
+        ("assistant", "a2"),
+        ("user", "q3"),
+        ("assistant", "a3"),
+        ("user", "q4"),
+        ("assistant", "a4"),
+        ("user", "q5"),
+        ("assistant", "a5"),
+        ("user", "q6"),
+        ("assistant", "a6"),
+    ]

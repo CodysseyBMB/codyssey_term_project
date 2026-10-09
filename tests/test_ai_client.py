@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from app.integrations.ai_client import (
+    AIConnectionError,
     AIProviderError,
     AITimeoutError,
     AnthropicGatewayClient,
@@ -77,6 +78,26 @@ def test_generate_raises_provider_error_on_failure_status() -> None:
         run(client.generate([{"role": "user", "content": "안녕"}]))
 
     assert exc_info.value.status_code == 500
+
+
+def test_generate_raises_connection_error() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("simulated connection failure", request=request)
+
+    client = make_real_client(handler)
+
+    with pytest.raises(AIConnectionError):
+        run(client.generate([{"role": "user", "content": "안녕"}]))
+
+
+def test_generate_rejects_invalid_success_payload() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"content": []})
+
+    client = make_real_client(handler)
+
+    with pytest.raises(AIProviderError):
+        run(client.generate([{"role": "user", "content": "안녕"}]))
 
 
 def test_repr_does_not_leak_api_key() -> None:
