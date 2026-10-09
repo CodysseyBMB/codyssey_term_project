@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>챗봇 · AI Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}">
+  </head>
+  <!--
+    data-csrf-token: 폼의 hidden input과 같은 역할이지만, 여긴 fetch()로
+    JSON을 보내야 해서 chat.js가 이 값을 읽어 X-CSRF-Token 헤더에 실어 보낸다.
+  -->
+  <body data-csrf-token="{{ csrf_token }}">
+    <main class="container">
+      <section class="status-card chat-card">
+        <p class="eyebrow">챗봇</p>
+        <h1>무엇이든 물어보세요</h1>
+        <p class="auth-guide">
+          <!-- 대화 기록을 저장하고 다시 불러오는 기능은 다른 이슈(#7, #8)에서 추가된다.
+               지금은 같은 화면을 새로고침하기 전까지만 질문·응답이 쌓인다. -->
+          AI 연동 전 임시 응답 버전입니다. 실제 답변은 이후 단계에서 연결됩니다.
+        </p>
+
+        <div id="chat-log" class="chat-log" aria-live="polite"></div>
+
+        <p id="chat-error" class="error" hidden></p>
+
+        <form id="chat-form">
+          <label>질문
+            <textarea
+              id="chat-question"
+              name="question"
+              required
+              minlength="1"
+              maxlength="2000"
+              rows="3"
+              placeholder="예: FastAPI 세션은 어떻게 동작해?"
+            ></textarea>
+          </label>
+          <button id="chat-submit" type="submit">전송</button>
+        </form>
+
+        <p class="auth-guide"><a href="/">홈으로</a></p>
+      </section>
+    </main>
+    <script src="{{ url_for('static', path='/js/chat.js') }}"></script>
+  </body>
+</html>
