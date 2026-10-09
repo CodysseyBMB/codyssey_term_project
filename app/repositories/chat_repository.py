@@ -83,3 +83,31 @@ def list_messages(
         .order_by(Message.created_at, Message.id)
     )
     return list(session.scalars(statement))
+
+
+def list_recent_messages(
+    session: Session, user_id: int, conversation_limit: int = 5
+) -> list[Message]:
+    """사용자의 최근 대화 메시지를 선택한 뒤 오래된 순서로 반환한다."""
+    recent_conversations = (
+        select(Conversation.id)
+        .where(Conversation.user_id == user_id)
+        .order_by(Conversation.created_at.desc(), Conversation.id.desc())
+        .limit(conversation_limit)
+        .subquery()
+    )
+    statement = (
+        select(Message)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .join(
+            recent_conversations,
+            recent_conversations.c.id == Conversation.id,
+        )
+        .order_by(
+            Conversation.created_at,
+            Conversation.id,
+            Message.created_at,
+            Message.id,
+        )
+    )
+    return list(session.scalars(statement))

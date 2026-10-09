@@ -32,8 +32,9 @@ class ChatRequest(BaseModel):
 
 
 class ChatResponse(BaseModel):
-    """POST /api/chat 성공 응답 본문. 실제 AI 연동과 DB 저장은 이슈 #7에서 구현한다."""
+    """POST /api/chat 성공 응답 본문."""
 
+    chat_id: int
     answer: str
     created_at: datetime
     request_id: str

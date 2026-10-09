@@ -11,6 +11,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.config import Settings, get_settings
 from app.access_control import get_current_user, get_or_create_csrf_token
 from app.db import create_database_engine, create_session_factory
+from app.integrations.ai_client import create_ai_client
 from app.models import User
 from app.routers import auth, chat
 from app.templating import TEMPLATES_DIR, templates
@@ -34,6 +35,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="AI Chatbot", version="0.1.0")
     app.state.settings = settings
     app.state.engine = engine
+    app.state.ai_client = create_ai_client(settings)
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.session_secret,

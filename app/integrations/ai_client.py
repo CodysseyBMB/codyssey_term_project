@@ -19,6 +19,10 @@ class AITimeoutError(AIClientError):
     """지정한 시간 안에 AI 응답이 오지 않았을 때 발생한다."""
 
 
+class AIConnectionError(AIClientError):
+    """AI 공급자와 네트워크 연결을 맺거나 유지하지 못했을 때 발생한다."""
+
+
 class AIProviderError(AIClientError):
     """AI 공급자(게이트웨이)가 오류 상태 코드를 반환했을 때 발생한다."""
 
@@ -79,12 +83,21 @@ class AnthropicGatewayClient:
             raise AITimeoutError(
                 f"AI request timed out after {self._timeout_seconds}s"
             ) from exc
+        except httpx.RequestError as exc:
+            raise AIConnectionError("AI provider connection failed") from exc
 
         if response.status_code >= 400:
             raise AIProviderError(response.status_code, response.text)
 
-        data = response.json()
-        return data["content"][0]["text"]
+        try:
+            answer = response.json()["content"][0]["text"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            raise AIProviderError(
+                response.status_code, "invalid response payload"
+            ) from exc
+        if not isinstance(answer, str) or not answer:
+            raise AIProviderError(response.status_code, "empty response content")
+        return answer
 
 
 class FakeAIClient:
