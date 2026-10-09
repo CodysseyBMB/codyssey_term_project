@@ -26,3 +26,11 @@ button { padding: .65rem 1rem; border-radius: .5rem; border: none; background: #
 .button { padding: .65rem 1rem; border-radius: .5rem; background: #818cf8; color: #0b1020; font-weight: 700; text-decoration: none; }
 .button.secondary { border: 1px solid #818cf8; background: transparent; color: #c7d2fe; }
 .auth-guide { margin-top: 1.25rem; color: #94a3b8; font-size: .9rem; }
+
+/* /chat 화면 전용 스타일 */
+.chat-card { width: min(40rem, 100%); }
+textarea { padding: .6rem .75rem; border-radius: .5rem; border: 1px solid #334155; background: #0b1020; color: #eef2ff; font: inherit; resize: vertical; }
+.chat-log { display: grid; gap: .6rem; max-height: 22rem; overflow-y: auto; margin-top: 1.25rem; padding-right: .25rem; }
+.chat-message { margin: 0; padding: .6rem .85rem; border-radius: .6rem; white-space: pre-wrap; word-break: break-word; }
+.chat-message--user { justify-self: end; background: #818cf8; color: #0b1020; }
+.chat-message--assistant { justify-self: start; background: #1f2937; border: 1px solid #334155; }
