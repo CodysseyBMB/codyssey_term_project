@@ -38,7 +38,10 @@
           <button id="chat-submit" type="submit">전송</button>
         </form>
 
-        <p class="auth-guide"><a href="/">홈으로</a></p>
+        <nav class="auth-actions" aria-label="주요 메뉴">
+          <a class="button secondary" href="/history">대화 기록</a>
+          <a class="button secondary" href="/">홈으로</a>
+        </nav>
       </section>
     </main>
     <script src="{{ url_for('static', path='/js/chat.js') }}"></script>

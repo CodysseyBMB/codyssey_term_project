@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>대화 기록 · AI Chatbot</title>
+    <link rel="stylesheet" href="{{ url_for('static', path='/css/app.css') }}">
+  </head>
+  <body>
+    <main class="container">
+      <section class="status-card history-card">
+        <p class="eyebrow">대화 기록</p>
+        <h1>내 질문과 답변</h1>
+
+        {% if history.items %}
+          <ol class="history-list" start="{{ history.offset + 1 }}">
+            {% for item in history.items %}
+              <li class="history-item">
+                <time datetime="{{ item.created_at.isoformat() }}" data-local-time>
+                  {{ item.created_at.isoformat() }}
+                </time>
+                <dl class="history-messages">
+                  <div>
+                    <dt>질문</dt>
+                    <dd>{{ item.question }}</dd>
+                  </div>
+                  <div>
+                    <dt>답변</dt>
+                    <dd>{{ item.answer }}</dd>
+                  </div>
+                </dl>
+              </li>
+            {% endfor %}
+          </ol>
+        {% else %}
+          <p class="empty-state">아직 저장된 대화가 없습니다.</p>
+        {% endif %}
+
+        <nav class="pagination" aria-label="대화 기록 페이지">
+          {% if history.offset > 0 %}
+            <a class="button secondary" href="/history?limit={{ history.limit }}&offset={{ previous_offset }}">이전</a>
+          {% endif %}
+          {% if history.has_more %}
+            <a class="button secondary" href="/history?limit={{ history.limit }}&offset={{ next_offset }}">다음</a>
+          {% endif %}
+        </nav>
+
+        <nav class="auth-actions" aria-label="주요 메뉴">
+          <a class="button" href="/chat">챗봇으로 이동</a>
+          <a class="button secondary" href="/">홈으로</a>
+        </nav>
+      </section>
+    </main>
+    <script src="{{ url_for('static', path='/js/history.js') }}"></script>
+  </body>
+</html>
