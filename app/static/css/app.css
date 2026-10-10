@@ -34,3 +34,15 @@ textarea { padding: .6rem .75rem; border-radius: .5rem; border: 1px solid #33415
 .chat-message { margin: 0; padding: .6rem .85rem; border-radius: .6rem; white-space: pre-wrap; word-break: break-word; }
 .chat-message--user { justify-self: end; background: #818cf8; color: #0b1020; }
 .chat-message--assistant { justify-self: start; background: #1f2937; border: 1px solid #334155; }
+
+/* /history 화면 전용 스타일 */
+.history-card { width: min(48rem, 100%); }
+.history-list { display: grid; gap: 1rem; margin: 1.5rem 0 0; padding: 0; list-style: none; }
+.history-item { padding: 1rem; border: 1px solid #334155; border-radius: .75rem; background: #0b1020; }
+.history-item time { color: #94a3b8; font-size: .8rem; }
+.history-messages { margin: .75rem 0 0; }
+.history-messages div { align-items: flex-start; }
+.history-messages dt { flex: 0 0 2.5rem; font-weight: 700; }
+.history-messages dd { white-space: pre-wrap; overflow-wrap: anywhere; }
+.empty-state { margin: 1.5rem 0; padding: 1rem; border: 1px dashed #334155; border-radius: .75rem; color: #94a3b8; text-align: center; }
+.pagination { display: flex; justify-content: space-between; gap: .75rem; margin-top: 1.25rem; }

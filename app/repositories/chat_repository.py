@@ -1,13 +1,30 @@
 from __future__ import annotations
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from dataclasses import dataclass
+from datetime import datetime
+
+from sqlalchemy import and_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.models import Conversation, Message
 
 
 class ConversationNotFoundError(LookupError):
     """대화가 없거나 요청한 사용자의 소유가 아닐 때 발생한다."""
+
+
+@dataclass(frozen=True)
+class ChatHistoryItem:
+    chat_id: int
+    question: str
+    answer: str
+    created_at: datetime
+
+
+@dataclass(frozen=True)
+class ChatHistoryPage:
+    items: list[ChatHistoryItem]
+    has_more: bool
 
 
 def create_conversation(
@@ -83,3 +100,80 @@ def list_messages(
         .order_by(Message.created_at, Message.id)
     )
     return list(session.scalars(statement))
+
+
+def list_recent_messages(
+    session: Session, user_id: int, conversation_limit: int = 5
+) -> list[Message]:
+    """사용자의 최근 대화 메시지를 선택한 뒤 오래된 순서로 반환한다."""
+    recent_conversations = (
+        select(Conversation.id)
+        .where(Conversation.user_id == user_id)
+        .order_by(Conversation.created_at.desc(), Conversation.id.desc())
+        .limit(conversation_limit)
+        .subquery()
+    )
+    statement = (
+        select(Message)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .join(
+            recent_conversations,
+            recent_conversations.c.id == Conversation.id,
+        )
+        .order_by(
+            Conversation.created_at,
+            Conversation.id,
+            Message.created_at,
+            Message.id,
+        )
+    )
+    return list(session.scalars(statement))
+
+
+def list_chat_history(
+    session: Session,
+    user_id: int,
+    limit: int = 20,
+    offset: int = 0,
+) -> ChatHistoryPage:
+    """완성된 Q/A 기록을 사용자별 최신순으로 페이지 조회한다."""
+    user_message = aliased(Message)
+    assistant_message = aliased(Message)
+    statement = (
+        select(
+            Conversation.id,
+            user_message.content,
+            assistant_message.content,
+            assistant_message.created_at,
+        )
+        .join(
+            user_message,
+            and_(
+                user_message.conversation_id == Conversation.id,
+                user_message.role == "user",
+            ),
+        )
+        .join(
+            assistant_message,
+            and_(
+                assistant_message.conversation_id == Conversation.id,
+                assistant_message.role == "assistant",
+            ),
+        )
+        .where(Conversation.user_id == user_id)
+        .order_by(Conversation.created_at.desc(), Conversation.id.desc())
+        .limit(limit + 1)
+        .offset(offset)
+    )
+    rows = session.execute(statement).all()
+    has_more = len(rows) > limit
+    items = [
+        ChatHistoryItem(
+            chat_id=row[0],
+            question=row[1],
+            answer=row[2],
+            created_at=row[3],
+        )
+        for row in rows[:limit]
+    ]
+    return ChatHistoryPage(items=items, has_more=has_more)

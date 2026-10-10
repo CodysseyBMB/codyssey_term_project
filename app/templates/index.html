@@ -17,6 +17,7 @@
           <p>로그인 상태입니다.</p>
           <nav class="auth-actions" aria-label="챗봇 메뉴">
             <a class="button" href="/chat">챗봇으로 이동</a>
+            <a class="button secondary" href="/history">대화 기록</a>
           </nav>
           <form class="auth-actions" method="post" action="/auth/logout">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
