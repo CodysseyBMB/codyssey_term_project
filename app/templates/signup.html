@@ -16,7 +16,7 @@
         <form method="post" action="/auth/signup">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <label>아이디
-            <input type="text" name="username" required minlength="3" maxlength="50">
+            <input type="text" name="username" required minlength="3" maxlength="20" pattern="[A-Za-z0-9_-]+" title="영문, 숫자, '_', '-'만 사용해 3~20자로 입력해주세요.">
           </label>
           <label>비밀번호
             <input type="password" name="password" required minlength="8" maxlength="100">
