@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from time import perf_counter
@@ -8,6 +9,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.integrations.ai_client import AIClientError, AIClientProtocol, AITimeoutError
+from app.logging_utils import (
+    AI_CALL_FAILURE,
+    AI_CALL_START,
+    AI_CALL_SUCCESS,
+    DB_SAVE_FAILURE,
+    DB_SAVE_SUCCESS,
+    log_event,
+)
 from app.repositories.chat_repository import (
     add_message,
     create_conversation,
@@ -54,7 +63,13 @@ class ChatService:
         self._ai_model = ai_model
         self._context_conversations = context_conversations
 
-    async def ask(self, user_id: int, question: str) -> ChatResult:
+    async def ask(
+        self, user_id: int, question: str, *, request_id: str | None = None
+    ) -> ChatResult:
+        # request_id가 없으면(기존 호출부·테스트 호환용) 로그에 적을 값만 하나 만든다.
+        # 실제 서비스 경로(routers/chat.py)는 항상 요청별 request_id를 넘긴다.
+        request_id = request_id or uuid.uuid4().hex
+
         try:
             history = list_recent_messages(
                 self._session,
@@ -69,17 +84,48 @@ class ChatService:
             self._session.rollback()
         except SQLAlchemyError as exc:
             self._session.rollback()
+            log_event(
+                DB_SAVE_FAILURE,
+                request_id=request_id,
+                user_id=user_id,
+                stage="context_read",
+                error_type=type(exc).__name__,
+            )
             raise ChatPersistenceError("대화 문맥을 조회하지 못했습니다.") from exc
 
         messages.append({"role": "user", "content": question})
+        log_event(
+            AI_CALL_START,
+            request_id=request_id,
+            user_id=user_id,
+            context_messages=len(history),
+        )
         started_at = perf_counter()
         try:
             answer = await self._ai_client.generate(messages)
         except AITimeoutError as exc:
+            log_event(
+                AI_CALL_FAILURE,
+                request_id=request_id,
+                user_id=user_id,
+                error_type=type(exc).__name__,
+            )
             raise ChatTimeoutError("AI 응답 시간이 초과되었습니다.") from exc
         except AIClientError as exc:
+            log_event(
+                AI_CALL_FAILURE,
+                request_id=request_id,
+                user_id=user_id,
+                error_type=type(exc).__name__,
+            )
             raise ChatUpstreamError("AI 공급자 요청에 실패했습니다.") from exc
         latency_ms = max(0, round((perf_counter() - started_at) * 1000))
+        log_event(
+            AI_CALL_SUCCESS,
+            request_id=request_id,
+            user_id=user_id,
+            latency_ms=latency_ms,
+        )
 
         try:
             conversation = create_conversation(self._session, user_id)
@@ -102,8 +148,21 @@ class ChatService:
             self._session.commit()
         except SQLAlchemyError as exc:
             self._session.rollback()
+            log_event(
+                DB_SAVE_FAILURE,
+                request_id=request_id,
+                user_id=user_id,
+                stage="persist",
+                error_type=type(exc).__name__,
+            )
             raise ChatPersistenceError("대화를 저장하지 못했습니다.") from exc
 
+        log_event(
+            DB_SAVE_SUCCESS,
+            request_id=request_id,
+            user_id=user_id,
+            chat_id=conversation.id,
+        )
         return ChatResult(
             chat_id=conversation.id,
             answer=assistant_message.content,
