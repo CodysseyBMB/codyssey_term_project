@@ -13,7 +13,11 @@ from app import models  # noqa: F401 — Base.metadata 등록용 (직접 쓰진 
 
 config = context.config
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers의 기본값(True)은 alembic.ini의 [loggers]에 없는
+    # 로거를 전부 꺼버린다. 테스트에서는 alembic upgrade가 매 테스트마다 실행돼서
+    # (conftest.migrated_database_url) app.events 로거(app/logging_utils.py)가
+    # 매번 비활성화되는 문제가 있었다. 기존 로거는 그대로 둔다.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 database_url = os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
 config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))

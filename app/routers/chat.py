@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import uuid
-
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy.orm import Session
@@ -76,7 +74,10 @@ async def ask_chat(
     db: Session = Depends(get_db),
     ai_client: AIClientProtocol = Depends(get_ai_client),
 ):
-    request_id = uuid.uuid4().hex
+    # main.py의 로깅 미들웨어가 요청마다 미리 심어둔 id. 이 요청의 request_received
+    # 로그와, 아래에서 ChatService가 남기는 ai_call_*/db_save_* 로그, 그리고
+    # 최종 응답 바디의 request_id가 전부 같은 값을 쓰게 된다.
+    request_id = request.state.request_id
 
     service = ChatService(
         session=db,
@@ -84,7 +85,7 @@ async def ask_chat(
         ai_model=request.app.state.settings.ai_model,
     )
     try:
-        result = await service.ask(current_user.id, payload.question)
+        result = await service.ask(current_user.id, payload.question, request_id=request_id)
     except ChatTimeoutError:
         return _error_response(
             504,

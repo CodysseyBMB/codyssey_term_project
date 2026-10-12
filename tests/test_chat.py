@@ -176,7 +176,7 @@ def test_api_chat_maps_database_error(
     login(client)
     csrf_token = get_header_csrf_token(client, "/chat")
 
-    async def fail_to_save(self, user_id: int, question: str):
+    async def fail_to_save(self, user_id: int, question: str, *, request_id: str | None = None):
         raise ChatPersistenceError("simulated database error")
 
     monkeypatch.setattr(ChatService, "ask", fail_to_save)
