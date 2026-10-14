@@ -15,6 +15,12 @@ from app.db import get_db
 from app.models import User
 from app.security import hash_password, verify_password
 from app.templating import templates
+from app.validation import (
+    PASSWORD_POLICY_MESSAGE,
+    USERNAME_POLICY_MESSAGE,
+    is_valid_password,
+    is_valid_username,
+)
 
 # APIRouter = 경로들의 묶음. main.py에서 include_router()로 앱에 연결한다.
 # prefix="/auth"를 주면 아래 "/signup"은 실제로 "/auth/signup"이 된다.
@@ -44,13 +50,26 @@ def login(
     _csrf: None = Depends(require_form_csrf),
     db: Session = Depends(get_db),
 ):
+    # username만 trim한다. password는 정책에 따라 검증한 원문을 그대로 해시해야 해서
+    # (app/validation.py 참고) 여기서도 strip() 등으로 가공하지 않는다.
     username = username.strip()
-    if not (3 <= len(username) <= 20) or not (8 <= len(password) <= 100):
+    if not is_valid_username(username):
         return templates.TemplateResponse(
             request=request,
             name="login.html",
             context={
-                "error": "아이디는 3~20자, 비밀번호는 8~100자 사이로 입력해주세요.",
+                "error": USERNAME_POLICY_MESSAGE,
+                "username": username,
+                "csrf_token": get_or_create_csrf_token(request),
+            },
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    if not is_valid_password(password):
+        return templates.TemplateResponse(
+            request=request,
+            name="login.html",
+            context={
+                "error": PASSWORD_POLICY_MESSAGE,
                 "username": username,
                 "csrf_token": get_or_create_csrf_token(request),
             },
@@ -114,13 +133,24 @@ def signup(
 ):
     username = username.strip()
 
-    # 입력 검증: 너무 짧거나 긴 아이디/비밀번호 거부
-    if not (3 <= len(username) <= 20) or not (8 <= len(password) <= 100):
+    # 아이디/비밀번호 정책(app/validation.py)을 각각 검증해, 어느 쪽이 문제인지
+    # 구체적으로 안내한다.
+    if not is_valid_username(username):
         return templates.TemplateResponse(
             request = request,
             name = "signup.html",
             context = {
-                "error": "아이디는 3~20자, 비밀번호는 8~100자 사이로 입력해주세요.",
+                "error": USERNAME_POLICY_MESSAGE,
+                "csrf_token": get_or_create_csrf_token(request),
+            },
+            status_code = 422,
+        )
+    if not is_valid_password(password):
+        return templates.TemplateResponse(
+            request = request,
+            name = "signup.html",
+            context = {
+                "error": PASSWORD_POLICY_MESSAGE,
                 "csrf_token": get_or_create_csrf_token(request),
             },
             status_code = 422,

@@ -94,7 +94,21 @@ def test_login_rejects_invalid_length(client: TestClient) -> None:
     response = login(client, username="ab")
 
     assert response.status_code == 422
-    assert "아이디는 3~20자" in response.text
+    assert "3~20자" in response.text
+
+
+def test_login_rejects_username_with_disallowed_characters(client: TestClient) -> None:
+    response = login(client, username="whale 01")
+
+    assert response.status_code == 422
+    assert "영문, 숫자" in response.text
+
+
+def test_login_rejects_password_outside_length_range(client: TestClient) -> None:
+    response = login(client, password="short")
+
+    assert response.status_code == 422
+    assert "8~100자" in response.text
 
 
 def test_index_switches_actions_after_login(
