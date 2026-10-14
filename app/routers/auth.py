@@ -12,11 +12,10 @@ from app.access_control import (
 from app.db import get_db
 from app.models import User
 from app.services.auth_service import (
-    AuthValidationError,
-    DuplicateUsernameError,
+    AuthService,
+    InvalidCredentialFormatError,
     InvalidCredentialsError,
-    authenticate_user,
-    register_user,
+    UsernameAlreadyExistsError,
 )
 from app.templating import templates
 
@@ -48,9 +47,10 @@ def login(
     _csrf: None = Depends(require_form_csrf),
     db: Session = Depends(get_db),
 ):
+    service = AuthService(db)
     try:
-        user = authenticate_user(db, username, password)
-    except AuthValidationError as exc:
+        user = service.authenticate(username, password)
+    except InvalidCredentialFormatError as exc:
         return templates.TemplateResponse(
             request=request,
             name="login.html",
@@ -113,13 +113,14 @@ def signup_form(request: Request):
 def signup(
     request: Request,
     username: str = Form(...),
-    password: str = Form(...),
+    password: str = Form(...),  # Form(...)의 ...은 필수값이라는 뜻
     _csrf: None = Depends(require_form_csrf),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_db),  # get_db가 세션을 자동으로 넣어준다.
 ):
+    service = AuthService(db)
     try:
-        register_user(db, username, password)
-    except AuthValidationError as exc:
+        service.register(username, password)
+    except InvalidCredentialFormatError as exc:
         return templates.TemplateResponse(
             request=request,
             name="signup.html",
@@ -129,7 +130,7 @@ def signup(
             },
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
-    except DuplicateUsernameError:
+    except UsernameAlreadyExistsError:
         return templates.TemplateResponse(
             request=request,
             name="signup.html",
@@ -140,4 +141,6 @@ def signup(
             status_code=status.HTTP_409_CONFLICT,
         )
 
+    # 303 See Other: POST 처리 결과를 GET으로 다시 보여주라는 뜻.
+    # 새로고침해도 폼이 중복 제출되지 않는다.
     return RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
