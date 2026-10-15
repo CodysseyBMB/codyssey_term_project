@@ -86,19 +86,20 @@ def test_signup_accepts_username_at_length_boundary(
 
 @pytest.mark.parametrize("username", ["whale 01", "whale!", "고래01", "whale🐳"])
 def test_signup_rejects_username_with_disallowed_characters(
-    client: TestClient, username: str
+    client: TestClient,
+    db_session: Session,
+    username: str,
 ) -> None:
     response = signup(client, username, "sea-shanty-9")
 
     assert response.status_code == 422
     assert "영문, 숫자" in response.text
+    assert db_session.scalar(select(User).where(User.username == username)) is None
 
 
 def test_signup_does_not_sanitize_password_before_hashing(
     client: TestClient, db_session: Session
 ) -> None:
-    # app/validation.py의 "참고": 비밀번호는 원문을 그대로 해시해야 한다.
-    # 앞뒤 공백·유니코드 문자가 trim되거나 거부되지 않고 그대로 반영되는지 확인한다.
     raw_password = "  바다 🐳 9글자이상  "
     response = signup(client, "whale05", raw_password)
 

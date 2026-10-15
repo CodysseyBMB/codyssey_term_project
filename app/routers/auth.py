@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.access_control import (
@@ -13,14 +11,13 @@ from app.access_control import (
 )
 from app.db import get_db
 from app.models import User
-from app.security import hash_password, verify_password
-from app.templating import templates
-from app.validation import (
-    PASSWORD_POLICY_MESSAGE,
-    USERNAME_POLICY_MESSAGE,
-    is_valid_password,
-    is_valid_username,
+from app.services.auth_service import (
+    AuthService,
+    InvalidCredentialFormatError,
+    InvalidCredentialsError,
+    UsernameAlreadyExistsError,
 )
+from app.templating import templates
 
 # APIRouter = 경로들의 묶음. main.py에서 include_router()로 앱에 연결한다.
 # prefix="/auth"를 주면 아래 "/signup"은 실제로 "/auth/signup"이 된다.
@@ -50,40 +47,27 @@ def login(
     _csrf: None = Depends(require_form_csrf),
     db: Session = Depends(get_db),
 ):
-    # username만 trim한다. password는 정책에 따라 검증한 원문을 그대로 해시해야 해서
-    # (app/validation.py 참고) 여기서도 strip() 등으로 가공하지 않는다.
-    username = username.strip()
-    if not is_valid_username(username):
+    service = AuthService(db)
+    try:
+        user = service.authenticate(username, password)
+    except InvalidCredentialFormatError as exc:
         return templates.TemplateResponse(
             request=request,
             name="login.html",
             context={
-                "error": USERNAME_POLICY_MESSAGE,
-                "username": username,
+                "error": str(exc),
+                "username": exc.username,
                 "csrf_token": get_or_create_csrf_token(request),
             },
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         )
-    if not is_valid_password(password):
-        return templates.TemplateResponse(
-            request=request,
-            name="login.html",
-            context={
-                "error": PASSWORD_POLICY_MESSAGE,
-                "username": username,
-                "csrf_token": get_or_create_csrf_token(request),
-            },
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        )
-
-    user = db.scalar(select(User).where(User.username == username))
-    if user is None or not verify_password(password, user.password_hash):
+    except InvalidCredentialsError as exc:
         return templates.TemplateResponse(
             request=request,
             name="login.html",
             context={
                 "error": INVALID_CREDENTIALS_MESSAGE,
-                "username": username,
+                "username": exc.username,
                 "csrf_token": get_or_create_csrf_token(request),
             },
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -111,68 +95,50 @@ def logout(
     )
     return response
 
+
 @router.get("/signup", response_class=HTMLResponse)
 def signup_form(request: Request):
     # GET: 빈 회원가입 폼 화면만 보여준다.
     return templates.TemplateResponse(
-        request = request,
-        name = "signup.html",
+        request=request,
+        name="signup.html",
         context={
             "error": None,
             "csrf_token": get_or_create_csrf_token(request),
         },
     )
 
+
 @router.post("/signup", response_class=HTMLResponse)
 def signup(
     request: Request,
     username: str = Form(...),
-    password: str = Form(...), # Form(...)의 ...은 필수값이라는 뜻
+    password: str = Form(...),  # Form(...)의 ...은 필수값이라는 뜻
     _csrf: None = Depends(require_form_csrf),
-    db: Session = Depends(get_db), # get_db가 세션을 자동으로 넣어준다.
+    db: Session = Depends(get_db),  # get_db가 세션을 자동으로 넣어준다.
 ):
-    username = username.strip()
-
-    # 아이디/비밀번호 정책(app/validation.py)을 각각 검증해, 어느 쪽이 문제인지
-    # 구체적으로 안내한다.
-    if not is_valid_username(username):
-        return templates.TemplateResponse(
-            request = request,
-            name = "signup.html",
-            context = {
-                "error": USERNAME_POLICY_MESSAGE,
-                "csrf_token": get_or_create_csrf_token(request),
-            },
-            status_code = 422,
-        )
-    if not is_valid_password(password):
-        return templates.TemplateResponse(
-            request = request,
-            name = "signup.html",
-            context = {
-                "error": PASSWORD_POLICY_MESSAGE,
-                "csrf_token": get_or_create_csrf_token(request),
-            },
-            status_code = 422,
-        )
-
-    # 완료 조건: 평문이 이나리 해시만 저장
-    user = User(username=username, password_hash=hash_password(password))
-    db.add(user)
+    service = AuthService(db)
     try:
-        db.commit()
-    except IntegrityError:
-        # username에 unique = True가 있어서, 중복 가입시 DB가 예외를 던진다.
-        # 여기서 잡아 "이미 존재하는 아이디"로 안내한다 (완료 조건 2번).
-        db.rollback()
+        service.register(username, password)
+    except InvalidCredentialFormatError as exc:
         return templates.TemplateResponse(
-            request = request,
+            request=request,
+            name="signup.html",
+            context={
+                "error": str(exc),
+                "csrf_token": get_or_create_csrf_token(request),
+            },
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        )
+    except UsernameAlreadyExistsError:
+        return templates.TemplateResponse(
+            request=request,
             name="signup.html",
             context={
                 "error": "이미 사용 중인 아이디입니다.",
                 "csrf_token": get_or_create_csrf_token(request),
             },
-            status_code = 409,
+            status_code=status.HTTP_409_CONFLICT,
         )
 
     # 303 See Other: POST 처리 결과를 GET으로 다시 보여주라는 뜻.
