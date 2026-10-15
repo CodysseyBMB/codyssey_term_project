@@ -4,12 +4,13 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.models import User
-from app.repositories.auth_repository import create_user, get_user_by_username
+from app.repositories.user_repository import create_user, get_user_by_username
 from app.security import hash_password, verify_password
-
-
-CREDENTIAL_FORMAT_MESSAGE = (
-    "아이디는 3~20자, 비밀번호는 8~100자 사이로 입력해주세요."
+from app.validation import (
+    PASSWORD_POLICY_MESSAGE,
+    USERNAME_POLICY_MESSAGE,
+    is_valid_password,
+    is_valid_username,
 )
 
 
@@ -18,8 +19,8 @@ class AuthServiceError(Exception):
 
 
 class InvalidCredentialFormatError(AuthServiceError):
-    def __init__(self, username: str) -> None:
-        super().__init__(CREDENTIAL_FORMAT_MESSAGE)
+    def __init__(self, message: str, username: str) -> None:
+        super().__init__(message)
         self.username = username
 
 
@@ -35,10 +36,16 @@ class UsernameAlreadyExistsError(AuthServiceError):
 
 def normalize_and_validate_credentials(username: str, password: str) -> str:
     normalized_username = username.strip()
-    if not (3 <= len(normalized_username) <= 20) or not (
-        8 <= len(password) <= 100
-    ):
-        raise InvalidCredentialFormatError(normalized_username)
+    if not is_valid_username(normalized_username):
+        raise InvalidCredentialFormatError(
+            USERNAME_POLICY_MESSAGE,
+            normalized_username,
+        )
+    if not is_valid_password(password):
+        raise InvalidCredentialFormatError(
+            PASSWORD_POLICY_MESSAGE,
+            normalized_username,
+        )
     return normalized_username
 
 

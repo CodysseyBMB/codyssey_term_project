@@ -17,4 +17,5 @@ def get_user_by_username(session: Session, username: str) -> User | None:
 def create_user(session: Session, username: str, password_hash: str) -> User:
     user = User(username=username, password_hash=password_hash)
     session.add(user)
+    session.flush()
     return user

@@ -13,6 +13,7 @@ from app.services.auth_service import (
     UsernameAlreadyExistsError,
     normalize_and_validate_credentials,
 )
+from app.validation import PASSWORD_POLICY_MESSAGE, USERNAME_POLICY_MESSAGE
 
 
 def test_normalize_and_validate_credentials_trims_only_username() -> None:
@@ -29,6 +30,7 @@ def test_normalize_and_validate_credentials_trims_only_username() -> None:
     [
         ("ab", "sea-shanty-9"),
         ("a" * 21, "sea-shanty-9"),
+        ("고래 01", "sea-shanty-9"),
         ("whale01", "short"),
         ("whale01", "a" * 101),
     ],
@@ -42,6 +44,22 @@ def test_login_and_signup_share_credential_format_validation(
         service.authenticate(username, password)
     with pytest.raises(InvalidCredentialFormatError):
         service.register(username, password)
+
+
+@pytest.mark.parametrize(
+    ("username", "password", "message"),
+    [
+        ("고래 01", "sea-shanty-9", USERNAME_POLICY_MESSAGE),
+        ("whale01", "short", PASSWORD_POLICY_MESSAGE),
+    ],
+)
+def test_credential_validation_uses_specific_policy_message(
+    username: str,
+    password: str,
+    message: str,
+) -> None:
+    with pytest.raises(InvalidCredentialFormatError, match=message):
+        normalize_and_validate_credentials(username, password)
 
 
 def test_register_normalizes_username_and_hashes_password(

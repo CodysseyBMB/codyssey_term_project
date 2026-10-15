@@ -2,15 +2,18 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.repositories.auth_repository import create_user, get_user_by_username
+from app.repositories.user_repository import (
+    create_user,
+    get_user_by_id,
+    get_user_by_username,
+)
 
 
-def test_get_user_by_username_returns_matching_user(db_session: Session) -> None:
-    created = create_user(db_session, "whale01", "hashed-password")
+def test_create_and_find_user(db_session: Session) -> None:
+    user = create_user(db_session, "whale01", "hashed-password")
 
-    found = get_user_by_username(db_session, "whale01")
-
-    assert found is created
+    assert get_user_by_id(db_session, user.id) is user
+    assert get_user_by_username(db_session, "whale01") is user
 
 
 def test_get_user_by_username_returns_none_for_unknown_user(
