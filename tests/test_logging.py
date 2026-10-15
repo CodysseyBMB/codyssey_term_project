@@ -10,12 +10,13 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.integrations.ai_client import AIProviderError, AITimeoutError, FakeAIClient
+from app.integrations.ai_client import AIProviderError, AITimeoutError
 from app.main import create_app
 from app.models import User
 from app.security import hash_password
 from app.services import chat_service as chat_service_module
 from app.services.chat_service import ChatPersistenceError, ChatService
+from tests.fakes import FakeAIClient
 from tests.helpers import get_csrf_token, get_header_csrf_token
 
 EVENT_LOGGER = "app.events"

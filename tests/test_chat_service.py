@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from app.integrations.ai_client import (
     AIProviderError,
     AITimeoutError,
-    FakeAIClient,
 )
 from app.models import Conversation, Message, User
 from app.repositories.chat_repository import add_message, create_conversation
@@ -21,6 +20,7 @@ from app.services.chat_service import (
     ChatTimeoutError,
     ChatUpstreamError,
 )
+from tests.fakes import FakeAIClient
 
 
 def run(coro):

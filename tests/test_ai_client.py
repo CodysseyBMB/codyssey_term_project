@@ -11,8 +11,8 @@ from app.integrations.ai_client import (
     AIProviderError,
     AITimeoutError,
     AnthropicGatewayClient,
-    FakeAIClient,
 )
+from tests.fakes import FakeAIClient
 
 
 def run(coro):
