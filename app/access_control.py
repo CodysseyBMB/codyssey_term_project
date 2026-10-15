@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import User
+from app.repositories.user_repository import get_user_by_id
 
 
 CSRF_SESSION_KEY = "csrf_token"
@@ -25,7 +26,7 @@ def get_current_user(
         request.session.clear()
         return None
 
-    user = db.get(User, user_id)
+    user = get_user_by_id(db, user_id)
     if user is None:
         request.session.clear()
         return None
