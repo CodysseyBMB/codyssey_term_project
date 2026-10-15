@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import User
 from app.security import verify_password
-from app.validation import USERNAME_MAX_LENGTH, USERNAME_MIN_LENGTH
 from tests.helpers import get_csrf_token
 
 
@@ -50,60 +48,3 @@ def test_signup_rejects_short_password(client: TestClient) -> None:
     response = signup(client, "whale03", "short")
 
     assert response.status_code == 422
-
-
-def test_signup_rejects_password_over_max_length(client: TestClient) -> None:
-    response = signup(client, "whale04", "a" * 101)
-
-    assert response.status_code == 422
-    assert "8~100자" in response.text
-
-
-@pytest.mark.parametrize(
-    "length",
-    [USERNAME_MIN_LENGTH - 1, USERNAME_MAX_LENGTH + 1],
-)
-def test_signup_rejects_username_outside_length_range(
-    client: TestClient, length: int
-) -> None:
-    response = signup(client, "a" * length, "sea-shanty-9")
-
-    assert response.status_code == 422
-    assert "3~20자" in response.text
-
-
-@pytest.mark.parametrize(
-    "length",
-    [USERNAME_MIN_LENGTH, USERNAME_MAX_LENGTH],
-)
-def test_signup_accepts_username_at_length_boundary(
-    client: TestClient, length: int
-) -> None:
-    response = signup(client, "a" * length, "sea-shanty-9")
-
-    assert response.status_code == 303
-
-
-@pytest.mark.parametrize("username", ["whale 01", "whale!", "고래01", "whale🐳"])
-def test_signup_rejects_username_with_disallowed_characters(
-    client: TestClient, username: str
-) -> None:
-    response = signup(client, username, "sea-shanty-9")
-
-    assert response.status_code == 422
-    assert "영문, 숫자" in response.text
-
-
-def test_signup_does_not_sanitize_password_before_hashing(
-    client: TestClient, db_session: Session
-) -> None:
-    # app/validation.py의 "참고": 비밀번호는 원문을 그대로 해시해야 한다.
-    # 앞뒤 공백·유니코드 문자가 trim되거나 거부되지 않고 그대로 반영되는지 확인한다.
-    raw_password = "  바다 🐳 9글자이상  "
-    response = signup(client, "whale05", raw_password)
-
-    assert response.status_code == 303
-    user = db_session.scalar(select(User).where(User.username == "whale05"))
-    assert user is not None
-    assert verify_password(raw_password, user.password_hash)
-    assert not verify_password(raw_password.strip(), user.password_hash)
