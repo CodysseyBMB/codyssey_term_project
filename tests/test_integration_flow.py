@@ -3,7 +3,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.integrations.ai_client import AITimeoutError, FakeAIClient
+from app.integrations.ai_client import AITimeoutError
+from tests.fakes import FakeAIClient
 from tests.helpers import get_csrf_token, get_header_csrf_token
 
 

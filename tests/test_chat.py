@@ -4,10 +4,11 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from app.integrations.ai_client import AIProviderError, AITimeoutError, FakeAIClient
+from app.integrations.ai_client import AIProviderError, AITimeoutError
 from app.models import Conversation, Message, User
 from app.services.chat_service import ChatPersistenceError, ChatService
 from app.security import hash_password
+from tests.fakes import FakeAIClient
 from tests.helpers import get_csrf_token, get_header_csrf_token
 
 

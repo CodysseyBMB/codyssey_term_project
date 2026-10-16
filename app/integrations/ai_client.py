@@ -33,8 +33,8 @@ class AIProviderError(AIClientError):
 
 class AIClientProtocol(Protocol):
     # Protocol: "이 모양의 generate 메서드를 가진 객체라면 전부 AIClient로 취급한다"는
-    # 구조적 타이핑(structural typing)이다. 아래 AnthropicGatewayClient와 FakeAIClient가
-    # 서로 다른 클래스이면서도 이 모양만 맞추면 호출하는 쪽 코드를 바꾸지 않고 교체할 수 있다.
+    # 구조적 타이핑(structural typing)이다. 구현 클래스가 달라도 이 모양만 맞추면
+    # 호출하는 쪽 코드를 바꾸지 않고 교체할 수 있다.
     async def generate(self, messages: list[dict[str, str]]) -> str: ...
 
 
@@ -100,26 +100,8 @@ class AnthropicGatewayClient:
         return answer
 
 
-class FakeAIClient:
-    """테스트·개발용 가짜 클라이언트. 실제 네트워크를 전혀 쓰지 않는다."""
-
-    def __init__(
-        self, response: str = "fake response", error: AIClientError | None = None
-    ) -> None:
-        self._response = response
-        self._error = error
-        # 테스트에서 "호출한 쪽이 어떤 messages를 넘겼는지" 확인할 수 있게 저장해둔다.
-        self.received_messages: list[dict[str, str]] | None = None
-
-    async def generate(self, messages: list[dict[str, str]]) -> str:
-        self.received_messages = messages
-        if self._error is not None:
-            raise self._error
-        return self._response
-
-
 def create_ai_client(settings: Settings) -> AIClientProtocol:
-    """설정값만으로 실제 클라이언트를 만든다. 테스트에서는 FakeAIClient를 직접 써서 교체한다."""
+    """설정값으로 운영 AI 클라이언트를 만든다."""
     return AnthropicGatewayClient(
         api_key=settings.ai_api_key,
         base_url=settings.ai_base_url,
