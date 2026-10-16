@@ -393,6 +393,54 @@ LIMIT 10;
 
 ## 6. 로컬 개발 환경 실행 (Getting Started)
 
+### 개발용 ASGI 이벤트 로그
+
+`APP_ENV=development`이면 `create_app()`이 `ASGILoggingMiddleware`를 등록합니다.
+`production`과 그 외 값에서는 ASGI 상세 로그가 비활성화됩니다. 기존 요청·AI 호출·DB
+저장 로그는 환경에 관계없이 유지됩니다. 배포 환경 이름은 `product`가 아닌
+`production`입니다. 환경값을 변경한 뒤에는 서버를 다시 시작해야 합니다.
+
+```bash
+APP_ENV=development uvicorn app.main:create_app --factory --reload
+```
+
+메서드·경로와 ASGI 이벤트 종류, 본문 바이트 수, 응답 상태 및 처리 시간이 `app.events`
+로거에 출력됩니다. `asgi_scope`에는 연결 유형(`type`), HTTP 버전(`http_version`),
+스킴(`scheme`), 클라이언트·서버 주소(`client`, `server`)와 허용된 요청 헤더
+(`content-type`, `content-length`, `accept`)만 기록합니다. 주소는 JSON 배열로,
+헤더는 중복을 보존하는 이름·값 쌍의 JSON 배열로 표시합니다. 없는 주소는 `null`입니다.
+쿠키·인증 헤더·쿼리 문자열·본문 원문은 출력하지 않습니다.
+기존 업무 로그와 같은 `request_id`로 연결할 수 있습니다. 아래는 축약한 예시입니다.
+
+```text
+asgi_request_start request_id=abc method=POST path=/api/chat
+asgi_scope request_id=abc type=http http_version=1.1 scheme=http client=["192.168.65.1", 52312] server=["172.18.0.2", 8000] headers=[["content-type", "application/json"], ["content-length", "32"]]
+request_received request_id=abc method=POST path=/api/chat
+asgi_receive request_id=abc type=http.request body_bytes=32 more_body=False
+...
+asgi_send request_id=abc type=http.response.start status=200
+asgi_send request_id=abc type=http.response.body body_bytes=180 more_body=True
+asgi_send request_id=abc type=http.response.body body_bytes=0 more_body=False
+asgi_request_end request_id=abc duration_ms=125.0 response_complete=True
+```
+
+청크 수와 이벤트 순서는 요청 처리 방식에 따라 달라집니다. 본문을 읽지 않는 요청에서는
+`asgi_receive`가 없을 수 있으며, 로깅을 위해 본문을 추가로 읽지는 않습니다.
+`send` 로그는 다음 계층으로 이벤트 전달이 성공했다는 뜻이고, 브라우저 수신이나 UI 반영
+완료를 뜻하지 않습니다. `response_complete`는 마지막 HTTP 응답 본문 이벤트의 전달 여부입니다.
+
+이 미들웨어는 기존 HTTP·세션 미들웨어 바깥, Starlette의 `ServerErrorMiddleware` 안쪽에
+위치합니다. 처리되지 않은 예외는 `asgi_request_error`에 예외 타입을 기록하고 그대로
+전파합니다. 이 경우 최외곽 오류 처리기가 생성한 500 응답은 ASGI 상세 로그의 관찰 범위
+밖이며, 기존 `unhandled_error` 로그에서 확인합니다. HTTP 외 lifespan/WebSocket은 그대로
+통과시킵니다. 로그를 영구 저장하는 기능은 포함하지 않습니다.
+
+DB 연결 없이 관련 테스트를 실행할 수 있습니다.
+
+```bash
+python -m pytest tests/test_asgi_logging.py -q
+```
+
 ### 6.1 요구 사항
 - Docker 24.0+ 및 Docker Compose v2+
 - Git

@@ -9,6 +9,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import Settings, get_settings
+from app.asgi_logging import ASGILoggingMiddleware
 from app.access_control import get_current_user, get_or_create_csrf_token
 from app.db import create_database_engine, create_session_factory
 from app.integrations.ai_client import create_ai_client
@@ -63,7 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # 각 라우터/서비스(chat_service 등)가 필요할 때 직접 남긴다.
     @app.middleware("http")
     async def log_request(request: Request, call_next):
-        request.state.request_id = uuid.uuid4().hex
+        request.state.request_id = _request_id(request)
         log_event(
             REQUEST_RECEIVED,
             request_id=request.state.request_id,
@@ -71,6 +72,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             path=request.url.path,
         )
         return await call_next(request)
+
+    # 마지막에 등록해 기존 HTTP/세션 미들웨어 바깥에서 관찰한다.
+    # Starlette의 최외곽 ServerErrorMiddleware가 생성하는 500 응답은 관찰 범위 밖이다.
+    if settings.app_env == "development":
+        app.add_middleware(ASGILoggingMiddleware)
 
     # 기능별 라우터에 정의한 경로들을 앱에 연결한다.
     app.include_router(auth.router)
