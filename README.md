@@ -78,9 +78,11 @@ app/
 │   ├── chat.py          # 챗봇 뷰(/chat), 질문 전송 API(/api/chat)
 │   └── history.py       # 대화 기록 뷰(/history), 기록 목록 API(/api/me/chats)
 ├── services/            # 비즈니스 로직 계층
+│   ├── auth_service.py  # 회원가입 정책 검증/등록, 자격증명 인증 및 비밀번호 검증
 │   └── chat_service.py  # 문맥 조회, AI 호출, 지연시간 측정, 트랜잭션 저장 조율
 ├── repositories/        # 데이터베이스 접근 계층
-│   └── chat_repository.py # 대화/메시지 CRUD 및 철저한 user_id 소유권 격리 쿼리
+│   ├── chat_repository.py # 대화/메시지 CRUD 및 철저한 user_id 소유권 격리 쿼리
+│   └── user_repository.py # 사용자 단건 조회(ID/username) 및 신규 사용자 생성
 ├── integrations/        # 외부 서비스 연동 계층
 │   └── ai_client.py     # AI 게이트웨이 연동 어댑터 (AnthropicGatewayClient, FakeAIClient)
 ├── templates/           # Jinja2 서버사이드 HTML 템플릿
