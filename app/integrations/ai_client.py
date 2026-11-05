@@ -30,7 +30,7 @@ class AIProviderError(AIClientError):
         self.status_code = status_code
 # endregion
 
-# region 2. AI 클라이언트 프로토콜 정의
+# region 2. AI 클라이언트 프로토콜 정의 - 인터페이스와 동일
 class AIClientProtocol(Protocol):
     # Protocol: "이 모양의 generate 메서드를 가진 객체라면 전부 AIClient로 취급한다"는
     # 구조적 타이핑(structural typing)이다. 구현 클래스가 달라도 이 모양만 맞추면
