@@ -1,3 +1,4 @@
+# region import statements
 from __future__ import annotations
 
 import uuid
@@ -22,11 +23,11 @@ from app.repositories.chat_repository import (
     create_conversation,
     list_recent_messages,
 )
-
+# endregion
 
 DEFAULT_CONTEXT_CONVERSATIONS = 5
 
-
+# region 서비스 계층 예외 정의
 class ChatServiceError(Exception):
     """채팅 처리 실패를 라우터에 전달하는 서비스 계층 예외."""
 
@@ -41,10 +42,11 @@ class ChatUpstreamError(ChatServiceError):
 
 class ChatPersistenceError(ChatServiceError):
     """문맥 조회 또는 새 대화 저장에 실패한 경우."""
-
+# endregion
 
 @dataclass(frozen=True)
 class ChatResult:
+    """ChatService.ask()가 반환하는 결과 객체."""
     chat_id: int
     answer: str
     created_at: datetime

@@ -1,16 +1,15 @@
-from __future__ import annotations
-
-from typing import Protocol
-
-import httpx
-
-from app.config import Settings
-
 # Anthropic API 버전. 게이트웨이가 요구하는 값이라 모델/엔드포인트와 무관하게 고정한다.
 ANTHROPIC_VERSION = "2023-06-01"
 DEFAULT_MAX_TOKENS = 1024
 
+# region 0. import statements
+from __future__ import annotations
+from typing import Protocol
+import httpx
+from app.config import Settings
+# endregion
 
+# region 1. AI 클라이언트 예외 정의
 class AIClientError(Exception):
     """AI 호출이 실패했을 때의 공통 베이스 예외."""
 
@@ -29,15 +28,17 @@ class AIProviderError(AIClientError):
     def __init__(self, status_code: int, message: str) -> None:
         super().__init__(f"AI provider error {status_code}: {message}")
         self.status_code = status_code
+# endregion
 
-
+# region 2. AI 클라이언트 프로토콜 정의
 class AIClientProtocol(Protocol):
     # Protocol: "이 모양의 generate 메서드를 가진 객체라면 전부 AIClient로 취급한다"는
     # 구조적 타이핑(structural typing)이다. 구현 클래스가 달라도 이 모양만 맞추면
     # 호출하는 쪽 코드를 바꾸지 않고 교체할 수 있다.
     async def generate(self, messages: list[dict[str, str]]) -> str: ...
+# endregion
 
-
+# region 3. Anthropic 게이트웨이 클라이언트 구현
 class AnthropicGatewayClient:
     """Codyssey 'Neito' 게이트웨이의 Anthropic 네이티브 엔드포인트(/v1/messages)를 호출한다."""
 
@@ -62,17 +63,23 @@ class AnthropicGatewayClient:
         return f"AnthropicGatewayClient(model={self._model!r}, base_url={self._base_url!r})"
 
     async def generate(self, messages: list[dict[str, str]]) -> str:
+        # 큰 흐름만 보이게 단계별 함수로 나눈다: 보내기 → 상태 코드 확인 → 답변 꺼내기.
+        response = await self._send(messages)
+        if response.status_code >= 400:
+            raise AIProviderError(response.status_code, response.text)
+        return self._extract_answer(response)
+
+    async def _send(self, messages: list[dict[str, str]]) -> httpx.Response:
+        # 네트워크 단계의 오류만 여기서 앱 전용 예외로 바꾼다.
+        # TimeoutException은 RequestError의 하위 클래스라서 반드시 먼저 잡아야 한다.
+        # 순서가 바뀌면 시간 초과도 연결 실패로 분류되어 504 대신 502가 나간다.
         try:
             async with httpx.AsyncClient(
                 timeout=self._timeout_seconds, transport=self._transport
             ) as client:
-                response = await client.post(
+                return await client.post(
                     f"{self._base_url}/v1/messages",
-                    headers={
-                        "x-api-key": self._api_key,
-                        "anthropic-version": ANTHROPIC_VERSION,
-                        "content-type": "application/json",
-                    },
+                    headers=self._headers(),
                     json={
                         "model": self._model,
                         "max_tokens": DEFAULT_MAX_TOKENS,
@@ -80,15 +87,24 @@ class AnthropicGatewayClient:
                     },
                 )
         except httpx.TimeoutException as exc:
+            # from exc: 원래 httpx 예외를 원인으로 남겨 스택 트레이스에서 추적할 수 있게 한다.
             raise AITimeoutError(
                 f"AI request timed out after {self._timeout_seconds}s"
             ) from exc
         except httpx.RequestError as exc:
             raise AIConnectionError("AI provider connection failed") from exc
 
-        if response.status_code >= 400:
-            raise AIProviderError(response.status_code, response.text)
+    def _headers(self) -> dict[str, str]:
+        return {
+            "x-api-key": self._api_key,
+            "anthropic-version": ANTHROPIC_VERSION,
+            "content-type": "application/json",
+        }
 
+    @staticmethod
+    def _extract_answer(response: httpx.Response) -> str:
+        # 응답 JSON의 모양이 예상(content[0].text)과 다르거나 답변이 비어 있으면
+        # 공급자 오류로 본다.
         try:
             answer = response.json()["content"][0]["text"]
         except (ValueError, KeyError, IndexError, TypeError) as exc:
@@ -98,8 +114,9 @@ class AnthropicGatewayClient:
         if not isinstance(answer, str) or not answer:
             raise AIProviderError(response.status_code, "empty response content")
         return answer
+# endregion
 
-
+# region 4. 운영 AI 클라이언트 생성
 def create_ai_client(settings: Settings) -> AIClientProtocol:
     """설정값으로 운영 AI 클라이언트를 만든다."""
     return AnthropicGatewayClient(
@@ -108,3 +125,4 @@ def create_ai_client(settings: Settings) -> AIClientProtocol:
         model=settings.ai_model,
         timeout_seconds=settings.ai_timeout_seconds,
     )
+# endregion

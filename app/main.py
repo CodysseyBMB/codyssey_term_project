@@ -36,13 +36,14 @@ def _extract_validation_message(exc: RequestValidationError) -> str:
         return str(original_error)
     return first_error.get("msg", "요청 값이 올바르지 않습니다.")
 
-
+# FastAPI 애플리케이션을 생성하는 함수
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     engine = create_database_engine(settings.database_url)
     app = FastAPI(title="AI Chatbot", version="0.1.0")
     app.state.settings = settings
     app.state.engine = engine
+    # 운영 ai_client 생성 후 app.state.ai_client에 저장.
     app.state.ai_client = create_ai_client(settings)
     app.add_middleware(
         SessionMiddleware,
