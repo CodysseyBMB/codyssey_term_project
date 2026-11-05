@@ -12,7 +12,7 @@ from app.repositories.user_repository import get_user_by_id
 
 CSRF_SESSION_KEY = "csrf_token"
 
-
+# 현재 로그인한 사용자를 반환. 로그인 안 돼 있으면 None 반환
 def get_current_user(
     request: Request,
     db: Session = Depends(get_db),
@@ -32,7 +32,7 @@ def get_current_user(
         return None
     return user
 
-
+# 로그인 여부를 확인하고, 로그인 안 돼 있으면 401 에러를 발생시킨다.
 def require_user(current_user: User | None = Depends(get_current_user)) -> User:
     """Require authentication for a JSON API."""
     if current_user is None:

@@ -16,11 +16,11 @@ class Base(DeclarativeBase):
 def create_database_engine(database_url: str) -> Engine:
     return create_engine(database_url, pool_pre_ping=True)
 
-# 세션 팩토리를 생성하는 함수 정의
+# 세션 팩토리를 생성
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(bind=engine, expire_on_commit=False)
 
-# 라우터에서 Depends(get_db)로 쓰는 의존성 함수
+# 요청마다 세션을 하나 열어서 빌려주고, 요청이 끝나면 세션을 닫음
 def get_db(request: Request) -> Generator[Session, None, None]:
 
     with request.app.state.session_factory() as session:
