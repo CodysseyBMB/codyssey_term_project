@@ -1,6 +1,8 @@
-// 이 스크립트는 /chat 페이지에서만 로드된다 (chat.html 맨 아래 <script> 참고).
-// 서버가 그려준 화면(Jinja2) 위에서, 질문 전송만 fetch()로 처리해
-// 페이지를 새로고침하지 않고 같은 화면에 응답을 보여준다 (plan.md S4).
+/* 
+이 스크립트는 /chat 페이지에서만 로드된다 (chat.html 맨 아래 <script> 참고).
+서버가 그려준 화면(Jinja2) 위에서, 질문 전송만 fetch()로 처리해
+페이지를 새로고침하지 않고 같은 화면에 응답을 보여준다 (plan.md S4).
+*/
 
 const form = document.getElementById("chat-form");
 const questionInput = document.getElementById("chat-question");
@@ -8,8 +10,11 @@ const submitButton = document.getElementById("chat-submit");
 const log = document.getElementById("chat-log");
 const errorBox = document.getElementById("chat-error");
 
-// 로그인 페이지의 hidden input과 같은 CSRF 토큰. JSON API는 폼이 아니라서
-// 서버가 body의 data 속성에 심어둔 값을 읽어 헤더로 보낸다.
+// 0. CSRF 토큰 준비
+/*
+서버(Jinja2 템플릿)가 <body data-csrf-token="...">에 넣어둔 값을 읽는다.
+HTML의 data-csrf-token 속성은 JS에서 dataset.csrfToken으로 접근 가능
+*/
 const csrfToken = document.body.dataset.csrfToken;
 
 function appendMessage(role, text) {
@@ -43,16 +48,20 @@ form.addEventListener("submit", async (event) => {
   event.preventDefault();
   clearError();
 
+  // #region 1. 사용자가 입력한 질문을 가져와 공백을 제거한다.
   const question = questionInput.value.trim();
   if (!question) {
     showError("질문을 입력해 주세요.");
     return;
   }
-
+  
   appendMessage("user", question);
   questionInput.value = "";
   setLoading(true);
-
+  // #endregion
+  
+  // #region 2. 헤더와 JSON으로 전송
+  // .stringify()를 거쳐 JSON으로 변환된 질문을 body에 넣어 POST 요청한다.
   try {
     const response = await fetch("/api/chat", {
       method: "POST",
@@ -77,4 +86,5 @@ form.addEventListener("submit", async (event) => {
     setLoading(false);
     questionInput.focus();
   }
+  // #endregion
 });
