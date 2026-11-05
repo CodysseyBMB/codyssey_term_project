@@ -4,16 +4,16 @@ from datetime import datetime
 
 from pydantic import BaseModel, field_validator
 
-# plan.md 입력 검증 기본값: 앞뒤 공백 제거 후 빈 질문 거부, 길이 1~2,000자.
+# 앞뒤 공백 제거 후 빈 질문 거부, 길이 1~2,000자.
 MIN_QUESTION_LENGTH = 1
 MAX_QUESTION_LENGTH = 2000
 
-
+"""POST /api/chat 요청 본문. FastAPI가 JSON을 이 모델로 자동 파싱·검증한다."""
 class ChatRequest(BaseModel):
-    """POST /api/chat 요청 본문. FastAPI가 JSON을 이 모델로 자동 파싱·검증한다."""
 
     question: str
 
+    # 앞뒤 공백 제거 후 길이 1~2,000자 검증. 실패하면 RequestValidationError 발생.
     @field_validator("question")
     @classmethod
     def _trim_and_check_length(cls, value: str) -> str:
@@ -30,9 +30,8 @@ class ChatRequest(BaseModel):
             )
         return trimmed
 
-
+"""POST /api/chat 성공 응답 본문."""
 class ChatResponse(BaseModel):
-    """POST /api/chat 성공 응답 본문."""
 
     chat_id: int
     answer: str
