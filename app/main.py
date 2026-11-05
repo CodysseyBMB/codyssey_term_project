@@ -19,9 +19,8 @@ from app.routers import auth, chat, history
 from app.templating import TEMPLATES_DIR, templates
 
 
+# request_id가 없으면 새로 만들어 반환. 있으면 그대로 반환
 def _request_id(request: Request) -> str:
-    # 미들웨어가 요청마다 request.state.request_id를 심어둔다. 미들웨어를 타지 않은
-    # 경로는 없지만, 혹시 몰라 없을 때는 새로 하나 만들어 대체한다.
     request_id = getattr(request.state, "request_id", None)
     return request_id if isinstance(request_id, str) else uuid.uuid4().hex
 
@@ -58,21 +57,29 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = create_session_factory(engine)
     app.mount("/static", StaticFiles(directory=TEMPLATES_DIR.parent / "static"), name="static")
 
-    # Starlette는 add_middleware를 나중에 호출할수록 더 바깥쪽에 쌓는다. 즉 이
-    # 미들웨어는 SessionMiddleware보다 바깥이라 아직 request.session이 채워지기
-    # 전에 실행된다 — 그래서 user_id는 여기서 읽지 않고, 이미 로그인 여부를 아는
-    # 각 라우터/서비스(chat_service 등)가 필요할 때 직접 남긴다.
+    """
+    미들웨어 본체: 브라우저가 보낸 요청이 서버에 도착하면 가장 먼저 만나는 단계
+    """
+    #region 1. ID 정하기 + 요청 수신 로그 + 다음 단계로 넘기기
     @app.middleware("http")
+    # request: 들어온 요청 정보
+    # call_next: "다음 단계(라우터)로 넘기기" 함수
     async def log_request(request: Request, call_next):
         request.state.request_id = _request_id(request)
+        # 요청에 고유 id(번호표)를 붙인다. 예: "a1b2c3..."
+        # request.state는 요청에 임시로 값을 붙여두는 공간
         log_event(
-            REQUEST_RECEIVED,
-            request_id=request.state.request_id,
-            method=request.method,
-            path=request.url.path,
+            REQUEST_RECEIVED, # 이벤트 이름: "요청 받음"
+            request_id=request.state.request_id, # 번호표
+            method=request.method, # GET, POST 등
+            path=request.url.path, # /api/chat 등
         )
-        return await call_next(request)
+        # 터미널에 "요청 받음, id=..., POST /api/chat" 같은 로그를 남긴다.
 
+        return await call_next(request)
+    #endregion
+    
+    
     # 마지막에 등록해 기존 HTTP/세션 미들웨어 바깥에서 관찰한다.
     # Starlette의 최외곽 ServerErrorMiddleware가 생성하는 500 응답은 관찰 범위 밖이다.
     if settings.app_env == "development":
